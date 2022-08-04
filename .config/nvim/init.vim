@@ -1,13 +1,12 @@
 call plug#begin(has('nvim') ? stdpath('data') . '/plugged' : '~/.vim/plugged')
 
   Plug 'neoclide/coc.nvim', {'branch': 'release'}
-  Plug 'morhetz/gruvbox'
-  Plug 'folke/tokyonight.nvim', { 'branch': 'main' }
   Plug 'junegunn/fzf.vim'
   Plug 'preservim/nerdtree'
   Plug 'itchyny/lightline.vim'
   Plug 'itchyny/vim-gitbranch'
   Plug 'folke/which-key.nvim'
+  Plug 'dracula/vim', { 'as': 'dracula' }
 
 call plug#end()
 
@@ -24,9 +23,8 @@ EOF
 " Use ctrl + space for autocompletion suggestions
 inoremap <silent><expr> <c-space> coc#refresh()
 
-" Set colorscheme
-autocmd vimenter * ++nested colorscheme gruvbox
-set background=dark
+syntax enable
+colorscheme dracula
 
 "Use 24-bit (true-color) mode in Vim/Neovim when outside tmux.
 "If you're using tmux version 2.2 or later, you can remove the outermost $TMUX check and use tmux's 24-bit color support
