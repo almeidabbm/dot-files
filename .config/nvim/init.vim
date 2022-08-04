@@ -64,3 +64,6 @@ map <leader>t :NERDTreeToggle<CR>
 
 " turn hybrid line numbers on
 :set number relativenumber
+
+" NERDTree show hidden files by default
+let NERDTreeShowHidden=1
