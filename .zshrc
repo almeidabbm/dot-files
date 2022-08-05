@@ -124,3 +124,7 @@ eval $(keychain --eval --quiet --confhost id_ed25519)
 # fzf
 source /usr/share/fzf/key-bindings.zsh
 source /usr/share/fzf/completion.zsh
+
+# aliases
+
+alias dev="cd $HOME/Develop"
