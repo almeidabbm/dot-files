@@ -275,6 +275,7 @@ set tabstop=2 shiftwidth=2 expandtab smartindent
 let mapleader=";"
 map <leader><C-t> :FZF<CR>
 map <leader>t :NERDTreeToggle<CR>
+map <leader>tf :NERDTreeFocus<CR>
 
 " turn hybrid line numbers on
 :set number relativenumber
