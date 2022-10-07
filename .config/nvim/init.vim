@@ -252,7 +252,8 @@ set tabstop=2 shiftwidth=2 expandtab smartindent
 let mapleader=";"
 map <leader><C-t> :FZF<CR>
 map <leader><C-F> :Rg<CR>
-map <leader>t :NERDTreeFocus<CR>
+map <leader>t :NERDTreeOpen<CR>
+map <leader>tc :NERDTreeFocus<CR>
 map <leader>tt :NERDTreeClose<CR>
 
 " turn hybrid line numbers on
