@@ -1,6 +1,7 @@
 call plug#begin(has('nvim') ? stdpath('data') . '/plugged' : '~/.vim/plugged')
 
   Plug 'neoclide/coc.nvim', {'branch': 'release'}
+  Plug 'junegunn/fzf'
   Plug 'junegunn/fzf.vim'
   Plug 'preservim/nerdtree'
   Plug 'itchyny/lightline.vim'
@@ -250,8 +251,9 @@ set tabstop=2 shiftwidth=2 expandtab smartindent
 
 let mapleader=";"
 map <leader><C-t> :FZF<CR>
-map <leader>t :NERDTreeToggle<CR>
-map <leader>tf :NERDTreeFocus<CR>
+map <leader><C-F> :Rg<CR>
+map <leader>t :NERDTreeFocus<CR>
+map <leader>tt :NERDTreeClose<CR>
 
 " turn hybrid line numbers on
 :set number relativenumber
