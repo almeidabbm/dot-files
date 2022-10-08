@@ -11,7 +11,7 @@ call plug#begin(has('nvim') ? stdpath('data') . '/plugged' : '~/.vim/plugged')
   Plug 'morhetz/gruvbox'
   Plug 'nvim-treesitter/nvim-treesitter', {'do': ':TSUpdate'}
 
-  let g:coc_global_extensions = ['coc-tslint-plugin', 'coc-tsserver', 'coc-emmet', 'coc-css', 'coc-html', 'coc-json', 'coc-prettier']
+  let g:coc_global_extensions = ['coc-tslint-plugin', 'coc-tsserver', 'coc-emmet', 'coc-css', 'coc-html', 'coc-json', 'coc-prettier', 'coc-solargraph', 'coc-go']
 
 call plug#end()
 
@@ -252,9 +252,8 @@ set tabstop=2 shiftwidth=2 expandtab smartindent
 let mapleader=";"
 map <leader><C-t> :FZF<CR>
 map <leader><C-F> :Rg<CR>
-map <leader>t :NERDTreeOpen<CR>
-map <leader>tc :NERDTreeFocus<CR>
-map <leader>tt :NERDTreeClose<CR>
+map <leader>t :NERDTreeFocus<CR>
+map <leader>x :NERDTreeClose<CR>
 
 " turn hybrid line numbers on
 :set number relativenumber
