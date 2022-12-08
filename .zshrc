@@ -118,7 +118,7 @@ else
   # asdf
   . /opt/asdf-vm/asdf.sh
 
-  # eychain
+  # keychain
   eval $(keychain --eval --quiet --confhost id_ed25519)
 fi
 
@@ -133,3 +133,7 @@ autoload -Uz compinit && compinit
 # aliases
 alias dev="cd $HOME/Develop"
 
+# go
+if command -v go &> /dev/null; then
+  export PATH=$PATH:$(go env GOPATH)/bin
+fi
