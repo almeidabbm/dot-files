@@ -110,21 +110,26 @@ source $ZSH/oh-my-zsh.sh
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
-# asdf
-. /opt/asdf-vm/asdf.sh
+# When MacOS run specific config
+if [[ `uname` == "Darwin" ]]; then
+  # asdf
+  . /usr/local/opt/asdf/libexec/asdf.sh
+else
+  # asdf
+  . /opt/asdf-vm/asdf.sh
+
+  # eychain
+  eval $(keychain --eval --quiet --confhost id_ed25519)
+fi
 
 # append completions to fpath
 fpath=(${ASDF_DIR}/completions $fpath)
 # initialise completions with ZSH's compinit
 autoload -Uz compinit && compinit
 
-# Keychain
-eval $(keychain --eval --quiet --confhost id_ed25519)
-
 # fzf
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
 # aliases
-
 alias dev="cd $HOME/Develop"
 
