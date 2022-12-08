@@ -122,9 +122,9 @@ autoload -Uz compinit && compinit
 eval $(keychain --eval --quiet --confhost id_ed25519)
 
 # fzf
-source /usr/share/fzf/key-bindings.zsh
-source /usr/share/fzf/completion.zsh
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
 # aliases
 
 alias dev="cd $HOME/Develop"
+
