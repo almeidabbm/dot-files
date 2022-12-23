@@ -107,8 +107,8 @@ source $ZSH/oh-my-zsh.sh
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 
-# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+# To customize prompt, run `p10k configure` or edit ~/Develop/dot-files/.p10k.zsh.
+[[ ! -f ~/Develop/dot-files/.p10k.zsh ]] || source ~/Develop/dot-files/.p10k.zsh
 
 # When MacOS run specific config
 if [[ `uname` == "Darwin" ]]; then
@@ -137,3 +137,4 @@ alias dev="cd $HOME/Develop"
 if command -v go &> /dev/null; then
   export PATH=$PATH:$(go env GOPATH)/bin
 fi
+
