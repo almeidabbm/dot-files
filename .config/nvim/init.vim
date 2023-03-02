@@ -263,6 +263,8 @@ map <leader><C-f> :Rg<CR>
 map <leader><C-h> :History<CR>
 map <leader>t :NERDTreeFocus<CR>
 map <leader>x :NERDTreeClose<CR>
+nnoremap <C-u> <C-u>zz
+nnoremap <C-d> <C-d>zz
 
 " turn hybrid line numbers on
 :set number relativenumber
