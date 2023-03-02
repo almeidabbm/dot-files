@@ -258,11 +258,11 @@ set tabstop=2 shiftwidth=2 expandtab smartindent
 
 
 let mapleader=";"
-map <leader><C-t> :GFiles<CR>
-map <leader><C-f> :Rg<CR>
-map <leader><C-h> :History<CR>
-map <leader>t :NERDTreeFocus<CR>
-map <leader>x :NERDTreeClose<CR>
+nnoremap <leader><C-t> :GFiles<CR>
+nnoremap <leader><C-f> :Rg<CR>
+nnoremap <leader><C-h> :History<CR>
+nnoremap <leader>t :NERDTreeFocus<CR>
+nnoremap <leader>x :NERDTreeClose<CR>
 nnoremap <C-u> <C-u>zz
 nnoremap <C-d> <C-d>zz
 
