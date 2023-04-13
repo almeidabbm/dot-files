@@ -14,12 +14,12 @@ call plug#begin(has('nvim') ? stdpath('data') . '/plugged' : '~/.vim/plugged')
   Plug 'itchyny/lightline.vim'
   Plug 'itchyny/vim-gitbranch'
   Plug 'folke/which-key.nvim'
-  Plug 'dracula/vim', { 'as': 'dracula' }
-  Plug 'morhetz/gruvbox'
   Plug 'nvim-treesitter/nvim-treesitter', {'do': ':TSUpdate'}
   Plug 'dense-analysis/ale'
+  Plug 'dracula/vim', { 'as': 'dracula' }
+  Plug 'catppuccin/nvim', { 'as': 'catppuccin' }
 
-  let g:coc_global_extensions = ['coc-tslint-plugin', 'coc-tsserver', 'coc-emmet', 'coc-css', 'coc-html', 'coc-json', 'coc-prettier', 'coc-solargraph', 'coc-go']
+  let g:coc_global_extensions = ['coc-tslint-plugin', 'coc-tsserver', 'coc-emmet', 'coc-css', 'coc-html', 'coc-json', 'coc-prettier', 'coc-solargraph', 'coc-go', 'coc-rust-analyzer']
 
 call plug#end()
 
@@ -225,7 +225,7 @@ nnoremap <silent><nowait> <space>p  :<C-u>CocListResume<CR>
 "CoC Configuration end
 
 syntax enable
-colorscheme dracula
+colorscheme catppuccin
 
 "Use 24-bit (true-color) mode in Vim/Neovim when outside tmux.
 "If you're using tmux version 2.2 or later, you can remove the outermost $TMUX check and use tmux's 24-bit color support
