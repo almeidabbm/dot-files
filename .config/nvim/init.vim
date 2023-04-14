@@ -271,3 +271,4 @@ nnoremap <C-d> <C-d>zz
 
 " NERDTree show hidden files by default
 let NERDTreeShowHidden=1
+
