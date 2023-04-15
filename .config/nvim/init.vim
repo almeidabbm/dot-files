@@ -10,7 +10,6 @@ call plug#begin(has('nvim') ? stdpath('data') . '/plugged' : '~/.vim/plugged')
   Plug 'neoclide/coc.nvim', {'branch': 'release'}
   Plug 'junegunn/fzf'
   Plug 'junegunn/fzf.vim'
-  Plug 'preservim/nerdtree'
   Plug 'itchyny/lightline.vim'
   Plug 'itchyny/vim-gitbranch'
   Plug 'folke/which-key.nvim'
@@ -261,8 +260,7 @@ let mapleader=";"
 nnoremap <leader><C-t> :GFiles<CR>
 nnoremap <leader><C-f> :Rg<CR>
 nnoremap <leader><C-h> :History<CR>
-nnoremap <leader>t :NERDTreeFocus<CR>
-nnoremap <leader>x :NERDTreeClose<CR>
+nnoremap <leader>gss :GFiles?<CR>
 nnoremap <C-u> <C-u>zz
 nnoremap <C-d> <C-d>zz
 
