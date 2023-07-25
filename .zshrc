@@ -77,7 +77,7 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git)
+plugins=(git asdf)
 
 source $ZSH/oh-my-zsh.sh
 
@@ -112,12 +112,7 @@ source $ZSH/oh-my-zsh.sh
 
 # When MacOS run specific config
 if [[ `uname` == "Darwin" ]]; then
-  # asdf
-  . /usr/local/opt/asdf/libexec/asdf.sh
 else
-  # asdf
-  . /opt/asdf-vm/asdf.sh
-
   # keychain
   eval $(keychain --eval --quiet --confhost id_ed25519)
 fi
