@@ -253,16 +253,19 @@ let g:lightline = {
   \ },
 \ }
 
-set tabstop=2 shiftwidth=2 expandtab smartindent
-
-
 let mapleader=";"
 nnoremap <leader><C-t> :GFiles<CR>
 nnoremap <leader><C-f> :Rg<CR>
 nnoremap <leader><C-h> :History<CR>
-nnoremap <leader>gss :GFiles?<CR>
+nnoremap <leader>gt :GFiles?<CR>
 nnoremap <C-u> <C-u>zz
 nnoremap <C-d> <C-d>zz
+
+" Take care of tabstop
+set tabstop=2 shiftwidth=2 expandtab smartindent
+
+" Clipboard settings
+set clipboard+=unnamedplus
 
 " turn hybrid line numbers on
 :set number relativenumber
