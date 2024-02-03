@@ -112,18 +112,20 @@ source $ZSH/oh-my-zsh.sh
 
 # When MacOS run specific config
 if [[ `uname` == "Darwin" ]]; then
+# fzf
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 else
   # keychain
   eval $(keychain --eval --quiet --confhost id_ed25519)
+  
+  # fzf
+  [ -f ~/.fzf.mac.zsh ] && source ~/.fzf.mac.zsh
 fi
 
 # append completions to fpath
 fpath=(${ASDF_DIR}/completions $fpath)
 # initialise completions with ZSH's compinit
 autoload -Uz compinit && compinit
-
-# fzf
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
 # aliases
 alias dev="cd $HOME/Develop"
