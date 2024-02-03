@@ -112,14 +112,14 @@ source $ZSH/oh-my-zsh.sh
 
 # When MacOS run specific config
 if [[ `uname` == "Darwin" ]]; then
-# fzf
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+  # fzf
+  [ -f ~/.fzf.mac.zsh ] && source ~/.fzf.mac.zsh
 else
   # keychain
   eval $(keychain --eval --quiet --confhost id_ed25519)
   
   # fzf
-  [ -f ~/.fzf.mac.zsh ] && source ~/.fzf.mac.zsh
+  [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 fi
 
 # append completions to fpath

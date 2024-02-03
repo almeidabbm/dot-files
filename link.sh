@@ -6,7 +6,7 @@ ln -nfs $HOME/Develop/dot-files/.default-npm-packages $HOME/.default-npm-package
 
 # When MacOS run specific config
 if [[ `uname` == "Darwin" ]]; then
-    ln -nfs $HOME/Develop/dot-files/.fzf.zsh $HOME/.fzf.zsh
-else
     ln -nfs $HOME/Develop/dot-files/.fzf.mac.zsh $HOME/.fzf.mac.zsh
+else
+    ln -nfs $HOME/Develop/dot-files/.fzf.zsh $HOME/.fzf.zsh
 fi
