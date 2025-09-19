@@ -17,10 +17,6 @@ return {
         ensure_installed = {
           "prettier",
           "stylua",
-          "black",
-          "gofmt",
-          "rustfmt",
-          "rubocop",
         },
         automatic_installation = true,
         handlers = {},
@@ -50,10 +46,6 @@ return {
             },
           }),
           formatting.stylua,
-          formatting.black,
-          formatting.gofmt,
-          formatting.rustfmt,
-          formatting.rubocop,
 
           -- Diagnostics (if needed beyond LSP)
           -- diagnostics.eslint_d,

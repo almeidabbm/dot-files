@@ -8,18 +8,6 @@ return {
       local alpha = require("alpha")
       local dashboard = require("alpha.themes.dashboard")
 
-      -- Set header
-      dashboard.section.header.val = {
-        "                                                     ",
-        "  ███╗   ██╗███████╗ ██████╗ ██╗   ██╗██╗███╗   ███╗ ",
-        "  ████╗  ██║██╔════╝██╔═══██╗██║   ██║██║████╗ ████║ ",
-        "  ██╔██╗ ██║█████╗  ██║   ██║██║   ██║██║██╔████╔██║ ",
-        "  ██║╚██╗██║██╔══╝  ██║   ██║╚██╗ ██╔╝██║██║╚██╔╝██║ ",
-        "  ██║ ╚████║███████╗╚██████╔╝ ╚████╔╝ ██║██║ ╚═╝ ██║ ",
-        "  ╚═╝  ╚═══╝╚══════╝ ╚═════╝   ╚═══╝  ╚═╝╚═╝     ╚═╝ ",
-        "                                                     ",
-      }
-
       -- Set menu
       dashboard.section.buttons.val = {
         dashboard.button("f", "  Find file", ":Telescope find_files <CR>"),
@@ -45,34 +33,7 @@ return {
         end,
       })
 
-      dashboard.section.footer.opts.hl = "Type"
-      dashboard.section.header.opts.hl = "AlphaHeader"
-      dashboard.section.buttons.opts.hl = "AlphaButtons"
-
-      dashboard.opts.opts.noautocmd = true
-
       alpha.setup(dashboard.opts)
-    end,
-  },
-
-  -- Command palette
-  {
-    "mrjones2014/legendary.nvim",
-    priority = 10000,
-    lazy = false,
-    dependencies = { "kkharji/sqlite.lua" },
-    keys = {
-      { "<C-p>", "<cmd>Legendary<cr>", desc = "Command Palette" },
-    },
-    config = function()
-      require("legendary").setup({
-        extensions = {
-          lazy_nvim = true,
-          which_key = {
-            auto_register = true,
-          },
-        },
-      })
     end,
   },
 }

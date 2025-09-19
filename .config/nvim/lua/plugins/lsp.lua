@@ -23,22 +23,25 @@ return {
 
       require("mason-lspconfig").setup({
         ensure_installed = {
-          "tsserver",
+          "ts_ls",
           "eslint",
           "html",
           "cssls",
           "jsonls",
           "yamlls",
           "dockerls",
-          "rust_analyzer",
-          "gopls",
-          "pyright",
-          "solargraph",
+          "lua_ls",
         },
         automatic_installation = true,
+        handlers = {
+          function(server_name)
+            if vim.lsp.config[server_name] then
+              vim.lsp.enable(server_name)
+            end
+          end,
+        },
       })
 
-      local lspconfig = require("lspconfig")
       local capabilities = require("cmp_nvim_lsp").default_capabilities()
 
       -- LSP keymaps
@@ -50,17 +53,18 @@ return {
         vim.keymap.set("n", "gi", vim.lsp.buf.implementation, opts)
         vim.keymap.set("n", "gr", vim.lsp.buf.references, opts)
         vim.keymap.set("n", "K", vim.lsp.buf.hover, opts)
-        vim.keymap.set("n", "<leader>rn", vim.lsp.buf.rename, opts)
-        vim.keymap.set("n", "<leader>ac", vim.lsp.buf.code_action, opts)
+        vim.keymap.set("n", "<leader>lr", vim.lsp.buf.rename, opts)
+        vim.keymap.set("n", "<leader>la", vim.lsp.buf.code_action, opts)
         vim.keymap.set("n", "[g", vim.diagnostic.goto_prev, opts)
         vim.keymap.set("n", "]g", vim.diagnostic.goto_next, opts)
-        vim.keymap.set("n", "<leader>f", function()
+        vim.keymap.set("n", "<leader>lf", function()
           vim.lsp.buf.format({ async = true })
         end, opts)
+        vim.keymap.set("n", "<leader>ld", vim.diagnostic.open_float, opts)
       end
 
       -- TypeScript/JavaScript
-      lspconfig.tsserver.setup({
+      vim.lsp.config.ts_ls = {
         capabilities = capabilities,
         on_attach = on_attach,
         settings = {
@@ -73,10 +77,10 @@ return {
             },
           },
         },
-      })
+      }
 
       -- ESLint
-      lspconfig.eslint.setup({
+      vim.lsp.config.eslint = {
         capabilities = capabilities,
         on_attach = function(client, bufnr)
           on_attach(client, bufnr)
@@ -86,22 +90,22 @@ return {
             command = "EslintFixAll",
           })
         end,
-      })
+      }
 
       -- HTML
-      lspconfig.html.setup({
+      vim.lsp.config.html = {
         capabilities = capabilities,
         on_attach = on_attach,
-      })
+      }
 
       -- CSS
-      lspconfig.cssls.setup({
+      vim.lsp.config.cssls = {
         capabilities = capabilities,
         on_attach = on_attach,
-      })
+      }
 
       -- JSON
-      lspconfig.jsonls.setup({
+      vim.lsp.config.jsonls = {
         capabilities = capabilities,
         on_attach = on_attach,
         settings = {
@@ -110,10 +114,10 @@ return {
             validate = { enable = true },
           },
         },
-      })
+      }
 
       -- YAML
-      lspconfig.yamlls.setup({
+      vim.lsp.config.yamlls = {
         capabilities = capabilities,
         on_attach = on_attach,
         settings = {
@@ -121,52 +125,36 @@ return {
             schemas = require('schemastore').yaml.schemas(),
           },
         },
-      })
+      }
 
       -- Docker
-      lspconfig.dockerls.setup({
+      vim.lsp.config.dockerls = {
         capabilities = capabilities,
         on_attach = on_attach,
-      })
+      }
 
-      -- Rust
-      lspconfig.rust_analyzer.setup({
+      -- Lua
+      vim.lsp.config.lua_ls = {
         capabilities = capabilities,
         on_attach = on_attach,
         settings = {
-          ["rust-analyzer"] = {
-            checkOnSave = {
-              command = "clippy",
+          Lua = {
+            runtime = {
+              version = "LuaJIT",
+            },
+            diagnostics = {
+              globals = { "vim" },
+            },
+            workspace = {
+              library = vim.api.nvim_get_runtime_file("", true),
+              checkThirdParty = false,
+            },
+            telemetry = {
+              enable = false,
             },
           },
         },
-      })
-
-      -- Go
-      lspconfig.gopls.setup({
-        capabilities = capabilities,
-        on_attach = on_attach,
-        settings = {
-          gopls = {
-            analyses = {
-              unusedparams = true,
-            },
-            staticcheck = true,
-          },
-        },
-      })
-
-      -- Python
-      lspconfig.pyright.setup({
-        capabilities = capabilities,
-        on_attach = on_attach,
-      })
-
-      -- Ruby
-      lspconfig.solargraph.setup({
-        capabilities = capabilities,
-        on_attach = on_attach,
-      })
+      }
 
       -- Diagnostic configuration
       vim.diagnostic.config({
@@ -177,7 +165,7 @@ return {
         severity_sort = true,
       })
 
-      -- Diagnostic signs
+      -- Diagnostic signs - define early to avoid nvim-tree errors
       local signs = { Error = "✗", Warn = "⚠", Hint = "💡", Info = "ℹ" }
       for type, icon in pairs(signs) do
         local hl = "DiagnosticSign" .. type

@@ -22,7 +22,7 @@ keymap("n", "<A-k>", ":m .-2<CR>==", { desc = "Move line up" })
 keymap("v", "<A-j>", ":m '>+1<CR>gv=gv", { desc = "Move selection down" })
 keymap("v", "<A-k>", ":m '<-2<CR>gv=gv", { desc = "Move selection up" })
 
--- Better indent
+-- Better indent (stay in visual mode)
 keymap("v", "<", "<gv", { desc = "Indent left" })
 keymap("v", ">", ">gv", { desc = "Indent right" })
 
@@ -34,13 +34,6 @@ keymap({ "i", "x", "n", "s" }, "<C-s>", "<cmd>w<cr><esc>", { desc = "Save file" 
 
 -- Better paste
 keymap("v", "p", '"_dP', { desc = "Paste without yanking" })
-
--- Stay in visual mode after indenting
-keymap("v", "<", "<gv", { desc = "Indent and stay in visual mode" })
-keymap("v", ">", ">gv", { desc = "Indent and stay in visual mode" })
-
--- Diagnostic keymaps (already in LSP config but adding here for consistency)
-keymap("n", "<leader>e", vim.diagnostic.open_float, { desc = "Line diagnostics" })
 
 -- Quit
 keymap("n", "<leader>qq", "<cmd>qa<cr>", { desc = "Quit all" })
