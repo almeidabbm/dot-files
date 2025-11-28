@@ -134,3 +134,10 @@ alias dev="cd $HOME/Develop"
 if command -v go &> /dev/null; then
   export PATH=$PATH:$(go env GOPATH)/bin
 fi
+
+# bun completions
+[ -s "/Users/brunoalmeida/.bun/_bun" ] && source "/Users/brunoalmeida/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
