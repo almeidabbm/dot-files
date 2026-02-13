@@ -1,6 +1,6 @@
 ---
 name: review-respond
-description: Address PR review feedback, comments, or requested changes on a Graphite stack. Use when responding to code review, fixing review comments, or updating a PR after reviewer feedback.
+description: Review, assess, or address PR review feedback, comments, or requested changes on a Graphite stack. Use when checking review status, summarizing review comments, responding to code review, fixing review comments, or updating a PR after reviewer feedback.
 ---
 
 # Respond to PR Review Feedback
@@ -9,9 +9,11 @@ Address review comments on one or more branches in a Graphite stack.
 
 ## 1. Understand the feedback
 
-- Ask the user which PR/branch has review feedback, or accept a Graphite/GitHub PR link.
-- Read the review comments using `gh pr view <number> --comments` or the GT MCP tools.
-- Summarize the feedback and confirm the plan with the user before making changes.
+- Identify the PR/branch with review feedback from user context, the current Graphite stack (`gt log`), or accept a Graphite/GitHub PR link.
+- Read the review comments using `gh api repos/{owner}/{repo}/pulls/{number}/comments` and `gh pr view <number> --json reviews,comments`.
+- Cross-reference comments with the current branch state to determine which have already been addressed and which still need changes.
+- Present a clear summary of outstanding vs addressed items.
+- If the user only asked for an assessment/summary, stop here. Otherwise confirm the plan with the user before making changes.
 
 ## 2. Apply fixes
 
