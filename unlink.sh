@@ -39,6 +39,7 @@ echo "🤖 Claude Code configuration:"
 remove_symlink "$HOME/.claude/CLAUDE.md" "Claude global rules"
 remove_symlink "$HOME/.claude/skills/worktree-setup" "Claude worktree skill"
 remove_symlink "$HOME/.claude/skills/review-respond" "Claude review-respond skill"
+remove_symlink "$HOME/.claude/skills/code-review" "Claude code-review skill"
 
 echo ""
 echo "🔧 Tool configurations:"

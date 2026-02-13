@@ -42,6 +42,7 @@ echo "🤖 Setting up Claude Code configuration..."
 create_symlink "$HOME/Develop/dot-files/.claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md" "Claude global rules"
 create_symlink "$HOME/Develop/dot-files/.claude/skills/worktree-setup" "$HOME/.claude/skills/worktree-setup" "Claude worktree skill"
 create_symlink "$HOME/Develop/dot-files/.claude/skills/review-respond" "$HOME/.claude/skills/review-respond" "Claude review-respond skill"
+create_symlink "$HOME/Develop/dot-files/.claude/skills/code-review" "$HOME/.claude/skills/code-review" "Claude code-review skill"
 
 echo ""
 echo "🔧 Setting up tool configurations..."
