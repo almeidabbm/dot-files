@@ -1,7 +1,6 @@
 ---
 name: review-respond
-description: Address PR review feedback on a Graphite stack
-user_invocable: true
+description: Address PR review feedback, comments, or requested changes on a Graphite stack. Use when responding to code review, fixing review comments, or updating a PR after reviewer feedback.
 ---
 
 # Respond to PR Review Feedback
@@ -31,5 +30,5 @@ Address review comments on one or more branches in a Graphite stack.
 ## 4. Wrap up
 
 - Ask the user: **"Should I submit the updated stack (`gt submit --stack`), or will you handle it?"**
-  - If submit: run `gt submit --stack`.
-  - If the user will handle it: wait for confirmation before finishing.
+    - If submit: run `gt submit --stack`.
+    - If the user will handle it: wait for confirmation before finishing.

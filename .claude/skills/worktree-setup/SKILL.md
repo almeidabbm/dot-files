@@ -1,7 +1,6 @@
 ---
 name: worktree-setup
-description: Set up a git worktree and do work in it, then clean up when done
-user_invocable: true
+description: Use when starting any new feature, fix, refactor, or task. Sets up a git worktree, creates branches with Graphite, does the work inside the worktree, and cleans up when done. Also supports parallel or concurrent work on separate tasks.
 ---
 
 # Worktree Workflow
