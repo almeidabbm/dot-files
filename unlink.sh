@@ -35,6 +35,12 @@ remove_symlink "$HOME/.zshrc" "Zsh config"
 remove_symlink "$HOME/.p10k.zsh" "Powerlevel10k config"
 
 echo ""
+echo "🤖 Claude Code configuration:"
+remove_symlink "$HOME/.claude/CLAUDE.md" "Claude global rules"
+remove_symlink "$HOME/.claude/skills/worktree-setup" "Claude worktree skill"
+remove_symlink "$HOME/.claude/skills/review-respond" "Claude review-respond skill"
+
+echo ""
 echo "🔧 Tool configurations:"
 remove_symlink "$HOME/.default-npm-packages" "NPM packages"
 remove_symlink "$HOME/.fzf.zsh" "FZF config (Linux)"

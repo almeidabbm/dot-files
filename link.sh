@@ -38,6 +38,12 @@ create_symlink "$HOME/Develop/dot-files/.zshrc" "$HOME/.zshrc" "Zsh config"
 create_symlink "$HOME/Develop/dot-files/.p10k.zsh" "$HOME/.p10k.zsh" "Powerlevel10k theme"
 
 echo ""
+echo "🤖 Setting up Claude Code configuration..."
+create_symlink "$HOME/Develop/dot-files/.claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md" "Claude global rules"
+create_symlink "$HOME/Develop/dot-files/.claude/skills/worktree-setup" "$HOME/.claude/skills/worktree-setup" "Claude worktree skill"
+create_symlink "$HOME/Develop/dot-files/.claude/skills/review-respond" "$HOME/.claude/skills/review-respond" "Claude review-respond skill"
+
+echo ""
 echo "🔧 Setting up tool configurations..."
 create_symlink "$HOME/Develop/dot-files/.default-npm-packages" "$HOME/.default-npm-packages" "Default NPM packages"
 
