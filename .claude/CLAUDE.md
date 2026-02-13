@@ -55,6 +55,11 @@ When implementing a feature or larger change, **break it into a stack of small, 
 - Before committing, run tests **related to the changed files only** (not the full suite).
 - If unsure which tests are related, ask me rather than running the entire suite.
 
+## Permissions
+
+- When I approve a Bash command that isn't in the allow list, and it's a **local-only** operation (not push/submit), ask me if I want to add it to `~/.claude/settings.local.json` so it's auto-allowed next time.
+- Never auto-add remote/destructive commands (`git push`, `gt submit`, `rm -rf`, etc.) without asking.
+
 ## Code Style (TypeScript / Node.js)
 
 - Follow existing project conventions and patterns.
