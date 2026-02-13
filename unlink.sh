@@ -35,11 +35,7 @@ remove_symlink "$HOME/.zshrc" "Zsh config"
 remove_symlink "$HOME/.p10k.zsh" "Powerlevel10k config"
 
 echo ""
-echo "🤖 Claude Code configuration:"
-remove_symlink "$HOME/.claude/CLAUDE.md" "Claude global rules"
-remove_symlink "$HOME/.claude/skills/worktree-setup" "Claude worktree skill"
-remove_symlink "$HOME/.claude/skills/review-respond" "Claude review-respond skill"
-remove_symlink "$HOME/.claude/skills/code-review" "Claude code-review skill"
+"$(cd "$(dirname "$0")" && pwd)/unlink-claude.sh"
 
 echo ""
 echo "🔧 Tool configurations:"

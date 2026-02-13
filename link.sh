@@ -1,11 +1,13 @@
 #!/bin/bash
 
+DOTFILES_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 echo "🔗 Setting up dot-files symlinks..."
 
 # First, clean up any existing symlinks
-if [[ -f "./unlink.sh" ]]; then
+if [[ -f "$DOTFILES_DIR/unlink.sh" ]]; then
     echo "🧹 Running cleanup first..."
-    ./unlink.sh
+    "$DOTFILES_DIR/unlink.sh"
     echo ""
 else
     echo "⚠️  unlink.sh not found, proceeding with setup..."
@@ -38,11 +40,7 @@ create_symlink "$HOME/Develop/dot-files/.zshrc" "$HOME/.zshrc" "Zsh config"
 create_symlink "$HOME/Develop/dot-files/.p10k.zsh" "$HOME/.p10k.zsh" "Powerlevel10k theme"
 
 echo ""
-echo "🤖 Setting up Claude Code configuration..."
-create_symlink "$HOME/Develop/dot-files/.claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md" "Claude global rules"
-create_symlink "$HOME/Develop/dot-files/.claude/skills/worktree-setup" "$HOME/.claude/skills/worktree-setup" "Claude worktree skill"
-create_symlink "$HOME/Develop/dot-files/.claude/skills/review-respond" "$HOME/.claude/skills/review-respond" "Claude review-respond skill"
-create_symlink "$HOME/Develop/dot-files/.claude/skills/code-review" "$HOME/.claude/skills/code-review" "Claude code-review skill"
+"$DOTFILES_DIR/link-claude.sh"
 
 echo ""
 echo "🔧 Setting up tool configurations..."
