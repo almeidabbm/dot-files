@@ -37,13 +37,15 @@ Custom global rules and slash commands that standardize how Claude Code works ac
 - Auto-decomposition of features into **stacked PRs**
 - **Conventional commits** and **scoped testing** (only runs tests for changed files)
 
-**Skills** — slash commands you can use inside Claude Code:
+**Plugins:**
 
-| Command           | What it does                                                                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `/worktree-setup` | Creates a git worktree, builds a Graphite stack inside it, does the work, and cleans up when done. Use this to start any new task. |
-| `/code-review`    | Reviews a PR or Graphite stack. Checks correctness, security, types, architecture. Can submit the review via GitHub.               |
-| `/review-respond` | Fetches outstanding review comments, applies fixes with `gt modify`, restacks, and verifies nothing broke.                         |
+- [superpowers](https://github.com/obra/superpowers) — TDD, debugging, brainstorming, worktree workflows, code review, and more (installed from the official marketplace via `link-claude.sh`)
+
+**Skills** — custom slash commands:
+
+| Command        | What it does                                                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `/code-review` | Reviews a PR or Graphite stack. Checks correctness, security, types, architecture. Can submit the review via GitHub. |
 
 ---
 
