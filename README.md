@@ -51,17 +51,20 @@ Custom global rules and slash commands that standardize how Claude Code works ac
 
 ### Neovim
 
-Lua-based config with [lazy.nvim](https://github.com/folke/lazy.nvim). Optimized for TypeScript/JavaScript web development.
+Simplified Neovim 0.11 config with [lazy.nvim](https://github.com/folke/lazy.nvim). Optimized for TypeScript/JavaScript web development.
 
 |                |                                                                                         |
 | -------------- | --------------------------------------------------------------------------------------- |
 | **LSP**        | ts_ls, eslint, html, cssls, jsonls, yamlls, dockerls, lua_ls (auto-installed via Mason) |
-| **Completion** | nvim-cmp with LSP, buffer, path, and snippet sources                                    |
-| **Navigation** | Telescope (fuzzy finder) + nvim-tree (file explorer)                                    |
-| **Theme**      | Dracula                                                                                 |
-| **Leader**     | `;`                                                                                     |
+| **Completion** | Neovim 0.11 native LSP completion                                                      |
+| **Navigation** | Telescope (fuzzy finder) + Harpoon 2 (file marks)                                       |
+| **Git**        | Gitsigns + Diffview (diffs) + git-conflict (merge resolution)                           |
+| **AI**         | claudecode.nvim (Claude Code CLI integration)                                           |
+| **Formatting** | conform.nvim (prettier, stylua)                                                         |
+| **Theme**      | Catppuccin Mocha                                                                        |
+| **Leader**     | `Space`                                                                                 |
 
-Full keybindings and plugin list in [`.config/nvim/README.md`](.config/nvim/README.md).
+Full keybindings in [`.config/nvim/KEYBINDINGS.md`](.config/nvim/KEYBINDINGS.md).
 
 ---
 
@@ -85,7 +88,7 @@ Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/rom
 
 | Tool                                                          | Required for            |
 | ------------------------------------------------------------- | ----------------------- |
-| [Neovim](https://neovim.io/) >= 0.9                           | Editor config           |
+| [Neovim](https://neovim.io/) >= 0.11                          | Editor config           |
 | [oh-my-zsh](https://ohmyz.sh/)                                | Shell config            |
 | [powerlevel10k](https://github.com/romkatv/powerlevel10k)     | Shell theme             |
 | [asdf](https://asdf-vm.com/)                                  | Version management      |
