@@ -6,7 +6,7 @@ return {
     dependencies = {
       "williamboman/mason.nvim",
       "williamboman/mason-lspconfig.nvim",
-      "hrsh7th/cmp-nvim-lsp",
+      "b0o/schemastore.nvim",
     },
     config = function()
       -- Setup Mason first
@@ -16,9 +16,9 @@ return {
           icons = {
             package_installed = "✓",
             package_pending = "➜",
-            package_uninstalled = "✗"
-          }
-        }
+            package_uninstalled = "✗",
+          },
+        },
       })
 
       require("mason-lspconfig").setup({
@@ -33,44 +33,55 @@ return {
           "lua_ls",
         },
         automatic_installation = true,
-        handlers = {
-          function(server_name)
-            if vim.lsp.config[server_name] then
-              vim.lsp.enable(server_name)
-            end
-          end,
-        },
       })
 
-      local capabilities = require("cmp_nvim_lsp").default_capabilities()
+      -- LSP keymaps and completion via LspAttach autocmd (Neovim 0.11 idiom)
+      vim.api.nvim_create_autocmd("LspAttach", {
+        callback = function(args)
+          local client = vim.lsp.get_client_by_id(args.data.client_id)
+          local bufnr = args.buf
+          if not client then
+            return
+          end
 
-      -- LSP keymaps
-      local on_attach = function(client, bufnr)
-        local opts = { buffer = bufnr, remap = false }
+          -- Enable native LSP completion
+          if client:supports_method("textDocument/completion") then
+            vim.lsp.completion.enable(true, client.id, bufnr, { autotrigger = true })
+          end
 
-        vim.keymap.set("n", "gd", vim.lsp.buf.definition, opts)
-        vim.keymap.set("n", "gy", vim.lsp.buf.type_definition, opts)
-        vim.keymap.set("n", "gi", vim.lsp.buf.implementation, opts)
-        vim.keymap.set("n", "gr", vim.lsp.buf.references, opts)
-        vim.keymap.set("n", "K", vim.lsp.buf.hover, opts)
-        vim.keymap.set("n", "<leader>lr", vim.lsp.buf.rename, opts)
-        vim.keymap.set("n", "<leader>la", vim.lsp.buf.code_action, opts)
-        vim.keymap.set("n", "[g", vim.diagnostic.goto_prev, opts)
-        vim.keymap.set("n", "]g", vim.diagnostic.goto_next, opts)
-        vim.keymap.set("n", "<leader>lf", function()
-          vim.lsp.buf.format({ async = true })
-        end, opts)
-        vim.keymap.set("n", "<leader>ld", vim.diagnostic.open_float, opts)
-      end
+          local function map(keys, func, desc)
+            vim.keymap.set("n", keys, func, { buffer = bufnr, desc = desc })
+          end
 
-      -- TypeScript/JavaScript
+          -- Go-to commands (standard g prefix)
+          map("gd", vim.lsp.buf.definition, "Go to definition")
+          map("gy", vim.lsp.buf.type_definition, "Go to type definition")
+          map("gi", vim.lsp.buf.implementation, "Go to implementation")
+          map("gr", vim.lsp.buf.references, "Go to references")
+          map("K", vim.lsp.buf.hover, "Hover documentation")
+
+          -- Code actions (leader c prefix)
+          map("<leader>cr", vim.lsp.buf.rename, "Rename symbol")
+          map("<leader>ca", vim.lsp.buf.code_action, "Code action")
+          map("<leader>cd", vim.diagnostic.open_float, "Line diagnostics")
+
+          -- Diagnostic navigation
+          map("[d", vim.diagnostic.goto_prev, "Previous diagnostic")
+          map("]d", vim.diagnostic.goto_next, "Next diagnostic")
+
+          -- Manual completion trigger
+          vim.keymap.set("i", "<C-Space>", function()
+            vim.lsp.completion.trigger()
+          end, { buffer = bufnr, desc = "Trigger completion" })
+        end,
+      })
+
+      -- Server configurations
       vim.lsp.config.ts_ls = {
-        capabilities = capabilities,
-        on_attach = on_attach,
         settings = {
           typescript = {
             inlayHints = {
-              includeInlayParameterNameHints = 'all',
+              includeInlayParameterNameHints = "all",
               includeInlayParameterNameHintsWhenArgumentMatchesName = false,
               includeInlayFunctionParameterTypeHints = true,
               includeInlayVariableTypeHints = true,
@@ -79,98 +90,64 @@ return {
         },
       }
 
-      -- ESLint
-      vim.lsp.config.eslint = {
-        capabilities = capabilities,
-        on_attach = function(client, bufnr)
-          on_attach(client, bufnr)
-          -- Enable formatting through ESLint
-          vim.api.nvim_create_autocmd("BufWritePre", {
-            buffer = bufnr,
-            command = "EslintFixAll",
-          })
-        end,
-      }
-
-      -- HTML
-      vim.lsp.config.html = {
-        capabilities = capabilities,
-        on_attach = on_attach,
-      }
-
-      -- CSS
-      vim.lsp.config.cssls = {
-        capabilities = capabilities,
-        on_attach = on_attach,
-      }
-
-      -- JSON
       vim.lsp.config.jsonls = {
-        capabilities = capabilities,
-        on_attach = on_attach,
         settings = {
           json = {
-            schemas = require('schemastore').json.schemas(),
+            schemas = require("schemastore").json.schemas(),
             validate = { enable = true },
           },
         },
       }
 
-      -- YAML
       vim.lsp.config.yamlls = {
-        capabilities = capabilities,
-        on_attach = on_attach,
         settings = {
           yaml = {
-            schemas = require('schemastore').yaml.schemas(),
+            schemas = require("schemastore").yaml.schemas(),
           },
         },
       }
 
-      -- Docker
-      vim.lsp.config.dockerls = {
-        capabilities = capabilities,
-        on_attach = on_attach,
-      }
-
-      -- Lua
       vim.lsp.config.lua_ls = {
-        capabilities = capabilities,
-        on_attach = on_attach,
         settings = {
           Lua = {
-            runtime = {
-              version = "LuaJIT",
-            },
-            diagnostics = {
-              globals = { "vim" },
-            },
+            runtime = { version = "LuaJIT" },
+            diagnostics = { globals = { "vim" } },
             workspace = {
               library = vim.api.nvim_get_runtime_file("", true),
               checkThirdParty = false,
             },
-            telemetry = {
-              enable = false,
-            },
+            telemetry = { enable = false },
           },
         },
       }
 
-      -- Diagnostic configuration
+      -- Enable all servers (mason-lspconfig installs them, this activates them)
+      vim.lsp.enable({
+        "ts_ls",
+        "eslint",
+        "html",
+        "cssls",
+        "jsonls",
+        "yamlls",
+        "dockerls",
+        "lua_ls",
+      })
+
+      -- Diagnostic configuration (signs defined inline, not via deprecated sign_define)
       vim.diagnostic.config({
         virtual_text = true,
-        signs = true,
+        signs = {
+          text = {
+            [vim.diagnostic.severity.ERROR] = "✗",
+            [vim.diagnostic.severity.WARN] = "⚠",
+            [vim.diagnostic.severity.HINT] = "💡",
+            [vim.diagnostic.severity.INFO] = "ℹ",
+          },
+        },
         underline = true,
         update_in_insert = false,
         severity_sort = true,
       })
-
-      -- Diagnostic signs - define early to avoid nvim-tree errors
-      local signs = { Error = "✗", Warn = "⚠", Hint = "💡", Info = "ℹ" }
-      for type, icon in pairs(signs) do
-        local hl = "DiagnosticSign" .. type
-        vim.fn.sign_define(hl, { text = icon, texthl = hl, numhl = "" })
-      end
     end,
   },
 
@@ -178,11 +155,5 @@ return {
   {
     "williamboman/mason.nvim",
     cmd = "Mason",
-  },
-
-  -- Schema store for JSON/YAML
-  {
-    "b0o/schemastore.nvim",
-    lazy = true,
   },
 }
