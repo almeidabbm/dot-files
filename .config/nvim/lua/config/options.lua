@@ -20,6 +20,9 @@ opt.shiftwidth = 2
 opt.expandtab = true
 opt.smartindent = true
 
+-- Completion
+opt.completeopt = { "menu", "menuone", "noselect", "fuzzy" }
+
 -- Search
 opt.ignorecase = true
 opt.smartcase = true

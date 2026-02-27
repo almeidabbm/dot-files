@@ -70,9 +70,7 @@ return {
           map("]d", vim.diagnostic.goto_next, "Next diagnostic")
 
           -- Manual completion trigger
-          vim.keymap.set("i", "<C-Space>", function()
-            vim.lsp.completion.trigger()
-          end, { buffer = bufnr, desc = "Trigger completion" })
+          vim.keymap.set("i", "<C-Space>", "<C-x><C-o>", { buffer = bufnr, desc = "Trigger completion" })
         end,
       })
 
