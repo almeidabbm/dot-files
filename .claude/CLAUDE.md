@@ -9,15 +9,13 @@
 - Use `gt log` to visualize the current stack before making branching decisions.
 - Always run `gt sync` before starting any new work to ensure trunk is up to date.
 
-## Worktrees for Parallel Work
+## Worktrees
 
-- When I ask for parallel/concurrent work on separate tasks, use **git worktrees**.
-- Create worktrees as **sibling directories** to the main repo:
-    - Pattern: `../repo-name-branch-name`
-    - Example: if repo is `~/Develop/lightdash`, create `~/Develop/lightdash-feature-x`
-- Create the worktree directly from trunk: `git worktree add ../<repo-name>-<feature> trunk`
-- Build any branches/stacks **inside the worktree**, not in the main repo.
-- Always run `git worktree list` before creating new worktrees to check existing ones.
+- Store all worktrees in a single folder one level up: `../<repo-name>_worktrees/<feature>/`
+    - Example: if repo is `~/Develop/lightdash`, worktrees go in `~/Develop/lightdash_worktrees/fix-auth`
+- Create from trunk: `git worktree add ../<repo-name>_worktrees/<feature> trunk`
+- Use Graphite (`gt create`, `gt log`, etc.) inside the worktree for branching and stacking.
+- Run `docker compose` from inside the worktree directory (compose files use relative paths).
 - Remind me to clean up worktrees when work is done (`git worktree remove`).
 
 ## Stacking Work
