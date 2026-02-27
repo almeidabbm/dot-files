@@ -5,10 +5,10 @@ keymap("n", "<C-d>", "<C-d>zz", { desc = "Scroll down and center" })
 keymap("n", "<C-u>", "<C-u>zz", { desc = "Scroll up and center" })
 
 -- Navigation: move between windows
-keymap("n", "<C-h>", "<C-w>h", { desc = "Go to left window" })
-keymap("n", "<C-j>", "<C-w>j", { desc = "Go to lower window" })
-keymap("n", "<C-k>", "<C-w>k", { desc = "Go to upper window" })
-keymap("n", "<C-l>", "<C-w>l", { desc = "Go to right window" })
+keymap({ "n", "t" }, "<C-h>", "<C-\\><C-n><C-w>h", { desc = "Go to left window" })
+keymap({ "n", "t" }, "<C-j>", "<C-\\><C-n><C-w>j", { desc = "Go to lower window" })
+keymap({ "n", "t" }, "<C-k>", "<C-\\><C-n><C-w>k", { desc = "Go to upper window" })
+keymap({ "n", "t" }, "<C-l>", "<C-\\><C-n><C-w>l", { desc = "Go to right window" })
 
 -- Navigation: resize windows with arrows
 keymap("n", "<C-Up>", "<cmd>resize -2<cr>", { desc = "Decrease window height" })
