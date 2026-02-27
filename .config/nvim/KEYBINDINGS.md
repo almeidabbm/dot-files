@@ -90,7 +90,6 @@
 | `Space gS` | Stage entire buffer |
 | `Space gR` | Reset entire buffer |
 | `Space gb` | Blame current line |
-| `Space gd` | Diff this file |
 | `Space gv` | Open diff view (all changes) |
 | `Space gc` | Open merge conflict view |
 | `Space gq` | Close diff view |

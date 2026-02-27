@@ -1,11 +1,12 @@
 return {
   -- Gitsigns — inline git change markers and hunk operations
   -- ]h / [h       Navigate between hunks
-  -- <leader>gp    Preview hunk
+  -- <leader>gp    Preview hunk (floating popup)
   -- <leader>gs    Stage hunk
   -- <leader>gr    Reset hunk
   -- <leader>gS    Stage entire buffer
   -- <leader>gb    Blame current line
+  -- Use <leader>gv / <leader>gq for full diff view
   {
     "lewis6991/gitsigns.nvim",
     event = { "BufReadPre", "BufNewFile" },
@@ -38,7 +39,6 @@ return {
         map("n", "<leader>gb", function()
           gs.blame_line({ full = true })
         end, "Blame line")
-        map("n", "<leader>gd", gs.diffthis, "Diff this file")
       end,
     },
   },
