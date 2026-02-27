@@ -26,6 +26,10 @@ return {
         split_width_percentage = 0.4,
         provider = "native",
       },
+      diff_opts = {
+        open_in_new_tab = true,
+        hide_terminal_in_new_tab = true,
+      },
     },
   },
 }
