@@ -38,6 +38,9 @@ echo ""
 "$(cd "$(dirname "$0")" && pwd)/unlink-claude.sh"
 
 echo ""
+"$(cd "$(dirname "$0")" && pwd)/unlink-opencode.sh"
+
+echo ""
 echo "🔧 Tool configurations:"
 remove_symlink "$HOME/.default-npm-packages" "NPM packages"
 remove_symlink "$HOME/.fzf.zsh" "FZF config (Linux)"
