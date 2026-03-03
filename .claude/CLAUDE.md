@@ -58,6 +58,32 @@ When implementing a feature or larger change, **break it into a stack of small, 
 - When I approve a Bash command that isn't in the allow list, and it's a **local-only** operation (not push/submit), ask me if I want to add it to `~/.claude/settings.local.json` so it's auto-allowed next time.
 - Never auto-add remote/destructive commands (`git push`, `gt submit`, `rm -rf`, etc.) without asking.
 
+## Superpowers Skill Overrides
+
+The following rules **override** any defaults from superpowers skills. These take priority over skill instructions.
+
+### Worktrees (overrides `using-git-worktrees` skill)
+
+- **Ignore the skill's directory selection logic.** Always use the worktree convention from this file:
+    - Store worktrees at `../<repo-name>_worktrees/<feature>/`
+    - Create from trunk: `git worktree add ../<repo-name>_worktrees/<feature> trunk`
+- **Do NOT** use `.worktrees/`, `worktrees/`, or `~/.config/superpowers/worktrees/`.
+- Inside worktrees, prefer using **Graphite CLI (`gt`)** for all branch management if available.
+
+### Branch Management (overrides `finishing-a-development-branch` skill)
+
+- Use `gt create -m "<branch-name>"` instead of `git checkout -b`.
+- Use `gt submit` (with permission) instead of `git push -u origin`.
+- Use `gt log` to show branch state instead of `git log --oneline`.
+- For PRs, prefer `gt submit` + Graphite PR workflow over raw `gh pr create`.
+
+### Plan Files (overrides `writing-plans` skill)
+
+- **Do NOT** save plans inside the project (e.g., `docs/plans/`).
+- Save plans to `../<repo-name>_plans/YYYY-MM-DD-<feature-name>.md`.
+- Create the `../<repo-name>_plans/` directory if it doesn't exist.
+- Update any references in plan execution handoff to use the correct external path.
+
 ## Code Style (TypeScript / Node.js)
 
 - Follow existing project conventions and patterns.
