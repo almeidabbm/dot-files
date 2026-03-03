@@ -47,6 +47,7 @@ When implementing a feature or larger change, **break it into a stack of small, 
 - Keep commit messages concise (subject line under 72 chars).
 - Use the commit body for "why", not "what".
 - Each commit within a stacked branch should also be self-contained and not break the build.
+- **Never** add `Co-Authored-By` or any co-author trailer to commit messages. All commits should appear as authored solely by the user.
 
 ## Testing
 
