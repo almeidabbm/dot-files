@@ -8,7 +8,7 @@ return {
       "nvim-treesitter/nvim-treesitter-textobjects",
     },
     config = function()
-      require("nvim-treesitter.configs").setup({
+      require("nvim-treesitter").setup({
         ensure_installed = {
           "lua",
           "javascript",
@@ -85,7 +85,7 @@ return {
   -- Telescope (replaces fzf.vim)
   {
     "nvim-telescope/telescope.nvim",
-    branch = "0.1.x",
+    version = "0.2.x",
     dependencies = {
       "nvim-lua/plenary.nvim",
       {
