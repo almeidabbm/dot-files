@@ -29,4 +29,5 @@ opt.smartcase = true
 
 -- Split behavior
 opt.splitbelow = true
+vim.cmd("cnoreabbrev <expr> term getcmdtype() == ':' && getcmdline() ==# 'term' ? 'split \\| term' : 'term'")
 
