@@ -2,6 +2,7 @@
 
 ## Git & Branching
 
+- **Never commit directly to `main` (or trunk).** Before making any commits, check the current branch with `git branch --show-current`. If on `main`, create a new branch first using `gt create -m "<branch-name>"` before committing.
 - Use **Graphite CLI (`gt`)** for branch management instead of raw git commands when possible.
 - Use `gt create -m "branch-name"` to create branches (stacked on current branch).
 - Use plain `git checkout -b` only for independent branches that are NOT part of a stack.
