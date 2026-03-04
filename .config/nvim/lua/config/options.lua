@@ -27,3 +27,6 @@ opt.completeopt = { "menu", "menuone", "noselect", "fuzzy" }
 opt.ignorecase = true
 opt.smartcase = true
 
+-- Split behavior
+opt.splitbelow = true
+
