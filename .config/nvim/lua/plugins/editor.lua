@@ -85,7 +85,7 @@ return {
   -- Telescope (replaces fzf.vim)
   {
     "nvim-telescope/telescope.nvim",
-    version = "0.2.x",
+    version = "*",
     dependencies = {
       "nvim-lua/plenary.nvim",
       {
@@ -95,11 +95,11 @@ return {
     },
     cmd = "Telescope",
     keys = {
-      { "<leader>ff", "<cmd>Telescope find_files<cr>", desc = "Find files" },
-      { "<leader>fg", "<cmd>Telescope live_grep<cr>", desc = "Live grep" },
-      { "<leader>fr", "<cmd>Telescope oldfiles<cr>", desc = "Recent files" },
-      { "<leader>fb", "<cmd>Telescope buffers<cr>", desc = "Buffers" },
-      { "<leader>fh", "<cmd>Telescope help_tags<cr>", desc = "Help" },
+      { "<leader>ff", "<cmd>Telescope find_files<cr>",  desc = "Find files" },
+      { "<leader>fg", "<cmd>Telescope live_grep<cr>",   desc = "Live grep" },
+      { "<leader>fr", "<cmd>Telescope oldfiles<cr>",    desc = "Recent files" },
+      { "<leader>fb", "<cmd>Telescope buffers<cr>",     desc = "Buffers" },
+      { "<leader>fh", "<cmd>Telescope help_tags<cr>",   desc = "Help" },
       { "<leader>fd", "<cmd>Telescope diagnostics<cr>", desc = "Diagnostics" },
     },
     config = function()
@@ -144,6 +144,7 @@ return {
   -- Auto pairs
   {
     "windwp/nvim-autopairs",
+    version = "*",
     event = "InsertEnter",
     opts = {
       check_ts = true,
@@ -153,6 +154,7 @@ return {
   -- Comment
   {
     "numToStr/Comment.nvim",
+    version = "*",
     event = { "BufReadPost", "BufNewFile" },
     config = function()
       require("Comment").setup({
@@ -173,3 +175,4 @@ return {
   },
 
 }
+
