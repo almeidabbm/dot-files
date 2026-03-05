@@ -5,12 +5,13 @@ A simplified Neovim 0.11 configuration focused on web development with AI integr
 ## Features
 
 - **Neovim 0.11 native completion** — no plugin needed, LSP-powered
-- **Catppuccin Mocha** theme with matching statusline
-- **Telescope** for fuzzy finding files, grep, buffers (like Cmd+P)
+- **Kanagawa** (wave) theme with matching statusline
+- **Bufferline** for buffer tabs with pin and close-others support
+- **Telescope** for fuzzy finding files, grep, buffers, and in-buffer search
 - **Harpoon 2** for marking and jumping between key files
 - **Diffview + git-conflict** for reviewing diffs and resolving merge conflicts
-- **Claude Code integration** via claudecode.nvim
-- **conform.nvim** for formatting (prettier, stylua)
+- **AI integration** via claudecode.nvim and opencode.nvim
+- **conform.nvim** for formatting (oxfmt > prettier for JS/TS, stylua for Lua)
 - **Treesitter** for syntax highlighting and text objects
 - **Mason** for auto-installing LSP servers and formatters
 

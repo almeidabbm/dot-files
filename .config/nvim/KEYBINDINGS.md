@@ -44,6 +44,7 @@
 | `Space fr` | Recent files |
 | `Space fb` | Open buffers |
 | `Space fh` | Help tags |
+| `Space fs` | Search in current buffer |
 | `Space fd` | Diagnostics |
 
 ## Harpoon — File Navigation (Space h / Space 1-5)
@@ -131,10 +132,12 @@
 | Key | Action |
 |-----|--------|
 | `Space bd` | Delete buffer |
+| `Space bp` | Pin buffer |
+| `Space bo` | Close other buffers |
 | `Shift+h` | Previous buffer |
 | `Shift+l` | Next buffer |
 
-## AI — Claude Code (Space a)
+## AI (Space a)
 
 | Key | Action |
 |-----|--------|
@@ -144,6 +147,7 @@
 | `Space ab` | Add current buffer to Claude's context |
 | `Space aa` | Accept diff proposed by Claude |
 | `Space ad` | Deny diff proposed by Claude |
+| `Space ao` | Toggle OpenCode |
 
 ## Text Editing
 

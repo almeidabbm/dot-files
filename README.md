@@ -59,9 +59,10 @@ Simplified Neovim 0.11 config with [lazy.nvim](https://github.com/folke/lazy.nvi
 | **Completion** | Neovim 0.11 native LSP completion                                                      |
 | **Navigation** | Telescope (fuzzy finder) + Harpoon 2 (file marks)                                       |
 | **Git**        | Gitsigns + Diffview (diffs) + git-conflict (merge resolution)                           |
-| **AI**         | claudecode.nvim (Claude Code CLI integration)                                           |
-| **Formatting** | conform.nvim (prettier, stylua)                                                         |
-| **Theme**      | Catppuccin Mocha                                                                        |
+| **AI**         | claudecode.nvim + opencode.nvim (AI CLI integrations)                                   |
+| **Buffers**    | Bufferline (buffer tabs with pin/close support)                                         |
+| **Formatting** | conform.nvim (oxfmt > prettier for JS/TS, stylua for Lua)                               |
+| **Theme**      | Kanagawa (wave)                                                                         |
 | **Leader**     | `Space`                                                                                 |
 
 Full keybindings in [`.config/nvim/KEYBINDINGS.md`](.config/nvim/KEYBINDINGS.md).
