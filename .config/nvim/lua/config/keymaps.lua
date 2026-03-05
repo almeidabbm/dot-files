@@ -49,5 +49,4 @@ keymap("n", "<leader>wv", "<C-W>v", { desc = "Split right" })
 
 -- Buffers
 keymap("n", "<leader>bd", "<cmd>bdelete<cr>", { desc = "Delete buffer" })
-keymap("n", "<S-h>", "<cmd>bprevious<cr>", { desc = "Previous buffer" })
-keymap("n", "<S-l>", "<cmd>bnext<cr>", { desc = "Next buffer" })
+-- Shift+H/L mapped in bufferline plugin (ui.lua)
