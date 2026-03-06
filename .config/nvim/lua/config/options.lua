@@ -27,6 +27,12 @@ opt.completeopt = { "menu", "menuone", "noselect", "fuzzy" }
 opt.ignorecase = true
 opt.smartcase = true
 
+-- Auto-reload files changed externally (e.g. by Claude Code)
+opt.autoread = true
+vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter", "CursorHold", "CursorHoldI" }, {
+  command = "if mode() != 'c' | checktime | endif",
+})
+
 -- Split behavior
 opt.splitbelow = true
 vim.cmd("cnoreabbrev <expr> term getcmdtype() == ':' && getcmdline() ==# 'term' ? 'split \\| term' : 'term'")
