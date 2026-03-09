@@ -1,11 +1,13 @@
 ---
 name: code-review
-description: Review a pull request or Graphite stack. Use when asked to review a PR, check someone's code, give feedback on changes, or assess a diff for issues.
+description: Use when asked to review a PR, check someone's code, give feedback on changes, assess a diff for issues, or review a Graphite stack.
 ---
 
 # Code Review
 
-Review a PR and provide structured feedback.
+## Overview
+
+Structured PR review that catches real issues without nitpicking. Focus on correctness, security, and architecture — not style that linters handle.
 
 ## 1. Identify the PR
 
@@ -30,7 +32,7 @@ Check for:
 - **Architecture**: Does it follow existing patterns? Is the abstraction level appropriate?
 - **Testing**: Are the changes tested? Are important cases missing?
 - **Naming**: Are variables, functions, and files named clearly?
-- **Project conventions**: Check against CLAUDE.md rules (e.g. no duck typing, prefer strict object shapes, use `assertUnreachable`, wrap `JSON.parse` in try/catch).
+- **Project conventions**: Check against the project's CLAUDE.md rules and existing patterns.
 
 Do NOT flag:
 
@@ -46,6 +48,14 @@ Do NOT flag:
   - **Praise**: Call out things done well.
 - For each item, reference the file and line, explain the issue, and suggest a fix when possible.
 - If the PR looks good, say so clearly.
+
+## Common Mistakes
+
+- Reviewing style/formatting issues that linters and formatters already enforce.
+- Commenting on code outside the diff that wasn't changed in this PR.
+- Not reading surrounding context — reviewing a diff in isolation misses breaking interactions.
+- Flagging hypothetical future problems unrelated to the current change.
+- Reviewing a Graphite stack as one giant diff instead of PR-by-PR bottom-up.
 
 ## 5. Submit review (optional)
 
