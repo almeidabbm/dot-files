@@ -26,6 +26,12 @@ return {
         always_show_bufferline = false,
         show_buffer_close_icons = false,
         show_close_icon = false,
+        custom_filter = function(buf_number)
+          if vim.bo[buf_number].buftype == "terminal" then
+            return false
+          end
+          return true
+        end,
       },
     },
     keys = {
