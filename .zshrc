@@ -1,3 +1,9 @@
+# direnv: export env vars before p10k instant prompt to avoid console output warning
+# see https://github.com/romkatv/powerlevel10k/issues/702
+if command -v direnv &> /dev/null; then
+  emulate zsh -c "$(direnv export zsh)"
+fi
+
 # Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
 # Initialization code that may require console input (password prompts, [y/n]
 # confirmations, etc.) must go above this block; everything else may go below.
@@ -141,3 +147,8 @@ fi
 # bun
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
+
+# direnv: install the hook after p10k instant prompt
+if command -v direnv &> /dev/null; then
+  emulate zsh -c "$(direnv hook zsh)"
+fi
