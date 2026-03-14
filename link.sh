@@ -46,6 +46,9 @@ echo ""
 "$DOTFILES_DIR/link-opencode.sh"
 
 echo ""
+"$DOTFILES_DIR/link-mcp.sh"
+
+echo ""
 echo "🔧 Setting up tool configurations..."
 create_symlink "$HOME/Develop/dot-files/.default-npm-packages" "$HOME/.default-npm-packages" "Default NPM packages"
 
