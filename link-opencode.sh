@@ -47,17 +47,6 @@ create_symlink "$HOME/.config/opencode/superpowers/skills" \
                "Superpowers skills"
 
 echo ""
-echo "👤 Linking personal skills from dot-files..."
-for skill in "$HOME/Develop/dot-files/.claude/skills"/*; do
-    if [[ -d "$skill" ]]; then
-        skill_name=$(basename "$skill")
-        create_symlink "$skill" \
-                       "$HOME/.config/opencode/skills/$skill_name" \
-                       "Skill: $skill_name"
-    fi
-done
-
-echo ""
 echo "  ℹ️  Restart OpenCode to load the plugin and skills"
 echo ""
 echo "🎉 OpenCode setup complete!"
