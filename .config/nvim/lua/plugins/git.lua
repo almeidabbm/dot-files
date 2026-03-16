@@ -1,16 +1,20 @@
 return {
-  -- Gitsigns — inline git change markers and hunk operations
+  -- Gitsigns — inline git change markers, blame, and hunk operations
+  -- Current line blame shown as virtual text (auto, GitLens-style)
   -- ]h / [h       Navigate between hunks
   -- <leader>gp    Preview hunk (floating popup)
   -- <leader>gs    Stage hunk
   -- <leader>gr    Reset hunk
   -- <leader>gS    Stage entire buffer
-  -- <leader>gb    Blame current line
+  -- <leader>gb    Blame line (full details)
   -- Use <leader>gv / <leader>gq for full diff view
   {
     "lewis6991/gitsigns.nvim",
     event = { "BufReadPre", "BufNewFile" },
     opts = {
+      current_line_blame = true,
+      current_line_blame_opts = { delay = 300 },
+      current_line_blame_formatter = "<author>, <author_time:%R> · <summary>",
       signs = {
         add = { text = "▎" },
         change = { text = "▎" },
@@ -69,6 +73,50 @@ return {
         merge_tool = {
           layout = "diff3_mixed",
         },
+      },
+    },
+  },
+
+  -- Git graph — visual commit/branch graph
+  -- <leader>gg    Open git graph
+  -- <leader>gG    Open git graph for current branch only
+  {
+    "isakbm/gitgraph.nvim",
+    dependencies = { "sindrets/diffview.nvim" },
+    opts = {
+      symbols = {
+        merge_commit = "M",
+        commit = "●",
+      },
+      format = {
+        timestamp = "%R",
+        fields = { "hash", "timestamp", "author", "branch_name", "tag" },
+      },
+      hooks = {
+        on_select_commit = function(commit)
+          vim.notify("DiffviewOpen " .. commit.hash .. "^!")
+          vim.cmd(":DiffviewOpen " .. commit.hash .. "^!")
+        end,
+        on_select_range_commit = function(from, to)
+          vim.notify("DiffviewOpen " .. from.hash .. "~1.." .. to.hash)
+          vim.cmd(":DiffviewOpen " .. from.hash .. "~1.." .. to.hash)
+        end,
+      },
+    },
+    keys = {
+      {
+        "<leader>gg",
+        function()
+          require("gitgraph").draw({}, { all = true, max_count = 5000 })
+        end,
+        desc = "Git graph",
+      },
+      {
+        "<leader>gG",
+        function()
+          require("gitgraph").draw({}, { all = false, max_count = 500 })
+        end,
+        desc = "Git graph (current branch)",
       },
     },
   },
