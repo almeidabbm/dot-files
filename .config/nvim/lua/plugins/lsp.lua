@@ -100,7 +100,15 @@ return {
       vim.lsp.config.yamlls = {
         settings = {
           yaml = {
-            schemas = require("schemastore").yaml.schemas(),
+            schemas = vim.tbl_extend("force", require("schemastore").yaml.schemas(), {
+              ["file:///Users/brunoalmeida/Develop/lightdash/lightdash/packages/common/src/schemas/json/lightdash-dbt-2.0.json"] = {
+                "/**/models/**/*.yml",
+                "/**/models/**/*.yaml",
+              },
+              ["file:///Users/brunoalmeida/Develop/lightdash/lightdash/packages/common/src/schemas/json/lightdash-project-config-1.0.json"] = {
+                "/**/lightdash.config.yml",
+              },
+            }),
           },
         },
       }
