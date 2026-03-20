@@ -12,7 +12,8 @@
 
 ## Worktrees
 
-- Store all worktrees in a single folder one level up: `../<repo-name>_worktrees/<feature>/`
+- Store all worktrees in a single folder **exactly one level up** from the repo root: `../<repo-name>_worktrees/<feature>/`
+    - `../<repo-name>_worktrees/` means the **immediate parent directory** of the repo. NEVER go two or more levels up (`../../`).
     - Example: if repo is `~/Develop/lightdash`, worktrees go in `~/Develop/lightdash_worktrees/fix-auth`
 - Create from trunk: `git worktree add ../<repo-name>_worktrees/<feature> trunk`
 - Use Graphite (`gt create`, `gt log`, etc.) inside the worktree for branching and stacking.
@@ -71,7 +72,7 @@ The following rules **override** any defaults from superpowers skills. These tak
 ### Worktrees (overrides `using-git-worktrees` skill)
 
 - **Ignore the skill's directory selection logic.** Always use the worktree convention from this file:
-    - Store worktrees at `../<repo-name>_worktrees/<feature>/`
+    - Store worktrees at `../<repo-name>_worktrees/<feature>/` — **exactly one level up**, never `../../`.
     - Create from trunk: `git worktree add ../<repo-name>_worktrees/<feature> trunk`
 - **Do NOT** use `.worktrees/`, `worktrees/`, or `~/.config/superpowers/worktrees/`.
 - Inside worktrees, prefer using **Graphite CLI (`gt`)** for all branch management if available.
@@ -86,7 +87,7 @@ The following rules **override** any defaults from superpowers skills. These tak
 ### Plan Files (overrides `writing-plans` skill)
 
 - **Do NOT** save plans inside the project (e.g., `docs/plans/`).
-- Save plans to `../<repo-name>_plans/YYYY-MM-DD-<feature-name>.md`.
+- Save plans to `../<repo-name>_plans/YYYY-MM-DD-<feature-name>.md` — **exactly one level up**, never `../../`.
 - Create the `../<repo-name>_plans/` directory if it doesn't exist.
 - Update any references in plan execution handoff to use the correct external path.
 
