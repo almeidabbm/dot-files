@@ -16,9 +16,9 @@
     - Example: if repo is `~/Develop/lightdash`, worktrees go in `~/Develop/lightdash_worktrees/fix-auth`
 - Create from trunk: `git worktree add ../<repo-name>_worktrees/<feature> trunk`
 - Use Graphite (`gt create`, `gt log`, etc.) inside the worktree for branching and stacking.
-- After creating a worktree, copy `.env*` files from the main repo into the worktree so testing config is preserved:
-    - `cp <main-repo>/.env* ../<repo-name>_worktrees/<feature>/`
-    - This covers `.env`, `.env.development`, `.env.development.local`, and any other `.env*` variants.
+- After creating a worktree, copy `.env*` and `.envrc` files from the main repo into the worktree so testing config and direnv setup are preserved:
+    - `cp <main-repo>/.env* <main-repo>/.envrc ../<repo-name>_worktrees/<feature>/` (ignore errors if `.envrc` doesn't exist)
+    - This covers `.env`, `.env.development`, `.env.development.local`, any other `.env*` variants, and `.envrc` (direnv).
     - These files are gitignored, so they won't exist in fresh worktrees otherwise.
 - Run `docker compose` from inside the worktree directory (compose files use relative paths).
 - Remind me to clean up worktrees when work is done (`git worktree remove`).
