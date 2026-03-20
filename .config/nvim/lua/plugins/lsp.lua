@@ -71,6 +71,7 @@ return {
 
           -- Manual completion trigger
           vim.keymap.set("i", "<C-Space>", "<C-x><C-o>", { buffer = bufnr, desc = "Trigger completion" })
+          vim.keymap.set("i", "<C-k>", vim.lsp.buf.signature_help, { buffer = bufnr, desc = "Signature help" })
         end,
       })
 
