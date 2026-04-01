@@ -152,3 +152,5 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 if command -v direnv &> /dev/null; then
   emulate zsh -c "$(direnv hook zsh)"
 fi
+# claude code: native install (not brew) puts the binary in ~/.local/bin
+export PATH="$HOME/.local/bin:$PATH"
