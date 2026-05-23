@@ -22,7 +22,12 @@ create_symlink() {
 
 echo "🤖 Setting up Claude Code configuration..."
 create_symlink "$DOTFILES_DIR/.claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md" "Claude global rules"
-create_symlink "$DOTFILES_DIR/.claude/skills/code-review" "$HOME/.claude/skills/code-review" "Claude code-review skill"
+
+# Symlink every skill folder under .claude/skills/
+for skill_dir in "$DOTFILES_DIR"/.claude/skills/*/; do
+    skill_name=$(basename "$skill_dir")
+    create_symlink "$skill_dir" "$HOME/.claude/skills/$skill_name" "Claude skill: $skill_name"
+done
 
 echo ""
 echo "📦 Setting up required plugins..."

@@ -2,6 +2,8 @@
 
 # Standalone script to remove only Claude Code symlinks.
 
+DOTFILES_DIR="$HOME/Develop/dot-files"
+
 # Function to remove symlink if it exists and points to dot-files
 remove_symlink() {
     local target="$1"
@@ -24,7 +26,12 @@ remove_symlink() {
 
 echo "🤖 Cleaning up Claude Code symlinks..."
 remove_symlink "$HOME/.claude/CLAUDE.md" "Claude global rules"
-remove_symlink "$HOME/.claude/skills/code-review" "Claude code-review skill"
+
+# Remove every skill folder symlinked from .claude/skills/
+for skill_dir in "$DOTFILES_DIR"/.claude/skills/*/; do
+    skill_name=$(basename "$skill_dir")
+    remove_symlink "$HOME/.claude/skills/$skill_name" "Claude skill: $skill_name"
+done
 
 echo ""
 echo "🎉 Claude Code cleanup complete!"

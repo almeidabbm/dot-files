@@ -32,10 +32,11 @@ Custom global rules and slash commands that standardize how Claude Code works ac
 
 **Global rules** ([`CLAUDE.md`](.claude/CLAUDE.md)) enforce:
 
-- Branch management with **Graphite CLI** (`gt`)
-- **Git worktrees** for parallel work on separate tasks
+- Branch management with **Graphite CLI** (`gt`) — with plain-`git` fallbacks for machines that lack it
+- **Git worktrees** inside the repo (`.worktrees/`, gitignored) for parallel work
 - Auto-decomposition of features into **stacked PRs**
 - **Conventional commits** and **scoped testing** (only runs tests for changed files)
+- Per-task working memory at `.local/active/<slug>/` (gitignored) — see "AI-Native Engineering Workflow" below
 
 **Plugins:**
 
@@ -43,9 +44,38 @@ Custom global rules and slash commands that standardize how Claude Code works ac
 
 **Skills** — custom slash commands:
 
-| Command        | What it does                                                                                                         |
-| -------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `/code-review` | Reviews a PR or Graphite stack. Checks correctness, security, types, architecture. Can submit the review via GitHub. |
+| Command          | What it does                                                                                                                |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `/start-task`    | On-ramp for a new piece of work. Creates `.local/active/<slug>/` with 4 templated files and auto-detects task size.         |
+| `/status`        | "Where was I?" — read-only view of every active task with status, size, and next-step suggestion.                           |
+| `/pre-merge`     | Pre-merge confidence gate. Adversarial review + hardening checklist against spec, plan, system-map, and the diff.           |
+| `/archive-task`  | Lifecycle close-out. Moves `active/<slug>/` → `archive/<slug>/`, optionally graduates spec/runbook to `docs/`.              |
+| `/code-review`   | Reviews a PR or Graphite stack. Checks correctness, security, types, architecture. Composes with `/pre-merge`.              |
+
+---
+
+### AI-Native Engineering Workflow
+
+These skills + CLAUDE.md form a small workflow layer on top of Superpowers. The user-facing surface is three commands (`/start-task`, `/pre-merge`, `/archive-task`) plus `/status`; everything else flows from natural-language intent and CLAUDE.md auto-prompts.
+
+**Per-task working memory** at `.local/active/<slug>/`:
+
+- `spec.md` — written by `superpowers:brainstorming`
+- `plan.md` — written by `superpowers:writing-plans`
+- `notes.md` — front-matter (slug, linear, size, status, last-updated) + running log
+- `review.md` — written by `/pre-merge`
+
+**Durable architectural intelligence** at `.local/system-map/` (prefixed filenames: `inv-`, `area-`, `danger-`, `pitfall-`). Grows as tasks archive.
+
+**Typical flow:**
+
+1. `/start-task` (slug + auto-detected size) →
+2. describe intent — Claude picks brainstorming, writing-plans, TDD as appropriate →
+3. `/pre-merge` when tests pass →
+4. submit + merge →
+5. `/archive-task` (auto-suggested when PR is merged).
+
+See the design spec at `.local/active/2026-05-24-ai-native-eng-os/spec.md` (gitignored — read locally) for the full design.
 
 ---
 

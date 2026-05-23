@@ -9,6 +9,14 @@ description: Use when asked to review a PR, check someone's code, give feedback 
 
 Structured PR review that catches real issues without nitpicking. Focus on correctness, security, and architecture — not style that linters handle.
 
+## Composition with `/pre-merge`
+
+This skill reviews the **diff itself** for correctness, security, types, architecture, testing, and naming. It is complementary to `/pre-merge`, which reviews **production failure modes** (rollout safety, observability, migrations, hidden coupling, concurrency) against the spec + plan + system-map.
+
+- **For your own PRs:** run both before submitting. `code-review` checks the change is well-written; `/pre-merge` checks the change is safe to ship.
+- **For other people's PRs:** `code-review` alone is usually enough. Reach for `/pre-merge`'s lens only if the change is risky (migration, auth, rollout).
+- **Avoid duplication:** if the current branch has a `.local/active/<slug>/review.md` produced by `/pre-merge`, reference its findings — do not restate them.
+
 ## 1. Identify the PR
 
 - Accept a PR number, GitHub/Graphite URL, or branch name from the user.
@@ -39,6 +47,7 @@ Do NOT flag:
 - Nitpicks on style that linters already catch.
 - Missing docs/comments unless the logic is genuinely unclear.
 - Hypothetical future issues that don't apply to the current change.
+- **Production-failure-mode concerns** (rollout safety, migration ordering, observability gaps, hidden coupling, retries, concurrency at the system level) — those belong to `/pre-merge`. Mention them only if `/pre-merge` has not been run; otherwise reference `review.md`.
 
 ## 4. Present findings
 
