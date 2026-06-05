@@ -1,17 +1,17 @@
 #!/bin/bash
 
-# Standalone script to remove only Claude Code symlinks.
+# Standalone script to remove only Codex symlinks.
+# Can be run independently without affecting other dotfiles.
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
 
-# Function to remove symlink if it exists and points to dot-files
 remove_symlink() {
     local target="$1"
     local description="$2"
 
     if [[ -L "$target" ]]; then
         local link_target=$(readlink "$target")
-        if [[ "$link_target" == *"$HOME/Develop/dot-files"* ]]; then
+        if [[ "$link_target" == *"$DOTFILES_DIR"* ]]; then
             echo "  ❌ Removing: $target -> $link_target"
             rm "$target"
         else
@@ -24,15 +24,14 @@ remove_symlink() {
     fi
 }
 
-echo "🤖 Cleaning up Claude Code symlinks..."
-remove_symlink "$HOME/.claude/CLAUDE.md" "Claude global rules"
+echo "🧹 Cleaning up Codex symlinks..."
+remove_symlink "$HOME/.codex/AGENTS.md" "Codex global rules"
 
-# Remove every shared skill folder symlinked into Claude
 for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
     [[ -d "$skill_dir" ]] || continue
     skill_name=$(basename "$skill_dir")
-    remove_symlink "$HOME/.claude/skills/$skill_name" "Claude skill: $skill_name"
+    remove_symlink "$HOME/.codex/skills/$skill_name" "Codex skill: $skill_name"
 done
 
 echo ""
-echo "🎉 Claude Code cleanup complete!"
+echo "🎉 Codex cleanup complete!"

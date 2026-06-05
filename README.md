@@ -1,12 +1,12 @@
 # dot-files
 
-> Shared configuration for shell, Neovim, and Claude Code — symlinked into `$HOME` so everything stays version-controlled.
+> Shared configuration for shell, Neovim, Claude Code, Codex, and OpenCode — symlinked into `$HOME` so everything stays version-controlled.
 
 ---
 
 ## Quick start
 
-**Full setup** (shell + editor + Claude Code):
+**Full setup** (shell + editor + AI tooling):
 
 ```bash
 git clone <repo-url> ~/Develop/dot-files
@@ -20,7 +20,14 @@ git clone <repo-url> ~/Develop/dot-files
 ~/Develop/dot-files/link-claude.sh
 ```
 
-> To undo, run `unlink.sh` or `unlink-claude.sh` respectively.
+**Codex only** (won't touch your shell or editor):
+
+```bash
+git clone <repo-url> ~/Develop/dot-files
+~/Develop/dot-files/link-codex.sh
+```
+
+> To undo, run `unlink.sh`, `unlink-claude.sh`, or `unlink-codex.sh` respectively.
 
 ---
 
@@ -28,9 +35,9 @@ git clone <repo-url> ~/Develop/dot-files
 
 ### Claude Code
 
-Custom global rules and slash commands that standardize how Claude Code works across all projects.
+Claude uses the shared workflow rules from [`.ai/shared-instructions.md`](.ai/shared-instructions.md), symlinked into Claude's native `~/.claude/CLAUDE.md` location by `link-claude.sh`.
 
-**Global rules** ([`CLAUDE.md`](.claude/CLAUDE.md)) enforce:
+**Shared rules** enforce:
 
 - Branch management with **Graphite CLI** (`gt`) — with plain-`git` fallbacks for machines that lack it
 - **Git worktrees** inside the repo (`.worktrees/`, gitignored) for parallel work
@@ -42,7 +49,9 @@ Custom global rules and slash commands that standardize how Claude Code works ac
 
 - [superpowers](https://github.com/obra/superpowers) — TDD, debugging, brainstorming, worktree workflows, code review, and more (installed from the official marketplace via `link-claude.sh`)
 
-**Skills** — custom slash commands:
+**Shared repo workflow skills** live in [`.ai/skills/`](.ai/skills/) and are symlinked into Claude's native skills folder by `link-claude.sh`.
+
+**Skills**:
 
 | Command          | What it does                                                                                                                |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -52,11 +61,42 @@ Custom global rules and slash commands that standardize how Claude Code works ac
 | `/archive-task`  | Lifecycle close-out. Moves `active/<slug>/` → `archive/<slug>/`, optionally graduates spec/runbook to `docs/`.              |
 | `/code-review`   | Reviews a PR or Graphite stack. Checks correctness, security, types, architecture. Composes with `/pre-merge`.              |
 
+### Codex
+
+Codex uses the same shared workflow rules from [`.ai/shared-instructions.md`](.ai/shared-instructions.md), symlinked into Codex's native `~/.codex/AGENTS.md` location by `link-codex.sh`.
+
+**Shared repo workflow skills** live once in [`.ai/skills/`](.ai/skills/) and are symlinked into `~/.codex/skills/` by `link-codex.sh`.
+
+| Skill            | What it does                                                                                                                |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `start-task`     | Creates `.local/active/<slug>/` with templated task files and detected size.                                               |
+| `status`         | Summarizes active tasks and the next likely step.                                                                           |
+| `pre-merge`      | Runs a production-safety gate against spec, plan, system-map, and diff.                                                    |
+| `archive-task`   | Moves completed task memory into `archive/` and offers doc or system-map graduation.                                       |
+| `code-review`    | Reviews a diff, branch, or PR for correctness, security, types, architecture, and tests.                                  |
+
+**Plugin install:** `link-codex.sh` installs native Superpowers with `codex plugin add superpowers@openai-curated`.
+
+If `superpowers` is installed in Codex, these task files are the integration point: `spec.md` and `plan.md` remain the source of truth for this workflow.
+
+### Shared Source
+
+The reusable workflow content is agent-agnostic and lives in:
+
+- [`.ai/shared-instructions.md`](.ai/shared-instructions.md) for durable global workflow rules
+- [`.ai/skills/`](.ai/skills/) for reusable task workflows
+
+The link scripts project those shared files into each tool's native structure:
+
+- Claude Code -> `~/.claude/CLAUDE.md` and `~/.claude/skills/`
+- Codex -> `~/.codex/AGENTS.md` and `~/.codex/skills/`
+- OpenCode -> `~/.config/opencode/skills/`
+
 ---
 
 ### AI-Native Engineering Workflow
 
-These skills + CLAUDE.md form a small workflow layer on top of Superpowers. The user-facing surface is three commands (`/start-task`, `/pre-merge`, `/archive-task`) plus `/status`; everything else flows from natural-language intent and CLAUDE.md auto-prompts.
+These shared skills plus the shared instructions file form a small workflow layer on top of Superpowers. In Claude, the user-facing surface is three commands (`/start-task`, `/pre-merge`, `/archive-task`) plus `/status`; in Codex, the same workflows are available as skills.
 
 **Per-task working memory** at `.local/active/<slug>/`:
 
@@ -113,6 +153,10 @@ Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/rom
 | `unlink.sh`        | Remove all symlinks managed by this repo       |
 | `link-claude.sh`   | Symlink only Claude Code config                |
 | `unlink-claude.sh` | Remove only Claude Code symlinks               |
+| `link-codex.sh`    | Symlink only Codex config                      |
+| `unlink-codex.sh`  | Remove only Codex symlinks                     |
+| `link-opencode.sh` | Symlink only OpenCode config                   |
+| `unlink-opencode.sh` | Remove only OpenCode symlinks                |
 | `list-symlink.sh`  | List all active symlinks pointing to this repo |
 
 ## Prerequisites
@@ -124,5 +168,6 @@ Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/rom
 | [powerlevel10k](https://github.com/romkatv/powerlevel10k)     | Shell theme             |
 | [asdf](https://asdf-vm.com/)                                  | Version management      |
 | [fzf](https://github.com/junegunn/fzf)                        | Fuzzy finding           |
-| [Graphite CLI](https://graphite.dev/docs/graphite-cli)        | Claude Code skills      |
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Skills and global rules |
+| [Graphite CLI](https://graphite.dev/docs/graphite-cli)        | Shared workflow rules   |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Claude integration      |
+| [Codex](https://developers.openai.com/codex/)                 | Codex integration       |

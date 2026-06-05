@@ -1,11 +1,10 @@
 #!/bin/bash
 
-# Standalone script to symlink only Claude Code configuration.
+# Standalone script to symlink only Codex configuration.
 # Can be run independently without affecting other dotfiles.
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
 
-# Function to create symlink with better output
 create_symlink() {
     local source="$1"
     local target="$2"
@@ -20,27 +19,26 @@ create_symlink() {
     fi
 }
 
-echo "🤖 Setting up Claude Code configuration..."
-create_symlink "$DOTFILES_DIR/.ai/shared-instructions.md" "$HOME/.claude/CLAUDE.md" "Claude global rules"
+echo "🧠 Setting up Codex configuration..."
+create_symlink "$DOTFILES_DIR/.ai/shared-instructions.md" "$HOME/.codex/AGENTS.md" "Codex global rules"
 
-# Symlink every shared skill folder under .ai/skills/
 for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
     [[ -d "$skill_dir" ]] || continue
     skill_name=$(basename "$skill_dir")
-    create_symlink "$skill_dir" "$HOME/.claude/skills/$skill_name" "Claude skill: $skill_name"
+    create_symlink "$skill_dir" "$HOME/.codex/skills/$skill_name" "Codex skill: $skill_name"
 done
 
 echo ""
 echo "📦 Setting up required plugins..."
 
-# Install superpowers plugin from official marketplace
-claude plugin install superpowers@claude-plugins-official 2>/dev/null && \
+codex plugin add superpowers@openai-curated 2>/dev/null && \
     echo "  ✅ superpowers plugin installed" || \
     echo "  ⚠️  superpowers plugin already installed or failed"
 
 echo ""
-echo "  ℹ️  If plugin commands failed, run inside Claude Code:"
-echo "     /plugin install superpowers@claude-plugins-official"
-
+echo "  ℹ️  If plugin commands failed, run:"
+echo "     codex plugin add superpowers@openai-curated"
 echo ""
-echo "🎉 Claude Code setup complete!"
+echo "  ℹ️  Restart Codex if it is already open so it reloads AGENTS.md and skills"
+echo ""
+echo "🎉 Codex setup complete!"

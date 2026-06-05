@@ -43,6 +43,9 @@ echo ""
 "$DOTFILES_DIR/link-claude.sh"
 
 echo ""
+"$DOTFILES_DIR/link-codex.sh"
+
+echo ""
 "$DOTFILES_DIR/link-opencode.sh"
 
 echo ""

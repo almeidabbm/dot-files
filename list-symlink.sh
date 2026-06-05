@@ -9,14 +9,26 @@ targets=(
     "$HOME/.config/nvim/lua|Neovim Lua config"
     "$HOME/.zshrc|Zsh config"
     "$HOME/.p10k.zsh|Powerlevel10k theme"
-    "$HOME/.claude/CLAUDE.md|Claude global rules"
-    "$HOME/.claude/skills/worktree-setup|Claude worktree skill"
-    "$HOME/.claude/skills/review-respond|Claude review-respond skill"
-    "$HOME/.claude/skills/code-review|Claude code-review skill"
     "$HOME/.default-npm-packages|Default NPM packages"
     "$HOME/.fzf.zsh|FZF config (Linux)"
     "$HOME/.fzf.mac.zsh|FZF config (macOS)"
 )
+
+if [[ -f "$DOTFILES_DIR/.ai/shared-instructions.md" ]]; then
+    targets+=("$HOME/.claude/CLAUDE.md|Claude global rules")
+    targets+=("$HOME/.codex/AGENTS.md|Codex global rules")
+fi
+
+targets+=("$HOME/.config/opencode/plugins/superpowers.js|OpenCode superpowers plugin")
+targets+=("$HOME/.config/opencode/skills/superpowers|OpenCode superpowers skills")
+
+for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
+    [[ -d "$skill_dir" ]] || continue
+    skill_name=$(basename "$skill_dir")
+    targets+=("$HOME/.claude/skills/$skill_name|Claude skill: $skill_name")
+    targets+=("$HOME/.codex/skills/$skill_name|Codex skill: $skill_name")
+    targets+=("$HOME/.config/opencode/skills/$skill_name|OpenCode personal skill: $skill_name")
+done
 
 echo ""
 echo "🔗 Dot-files symlinks"

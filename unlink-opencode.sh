@@ -28,7 +28,7 @@ remove_symlink "$HOME/.config/opencode/skills/superpowers" "Superpowers skills"
 
 echo ""
 echo "👤 Removing personal skills from dot-files..."
-for skill in "$HOME/Develop/dot-files/.claude/skills"/*; do
+for skill in "$HOME/Develop/dot-files/.ai/skills"/*; do
     if [[ -d "$skill" ]]; then
         skill_name=$(basename "$skill")
         remove_symlink "$HOME/.config/opencode/skills/$skill_name" "Skill: $skill_name"

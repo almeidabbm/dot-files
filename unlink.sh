@@ -38,6 +38,9 @@ echo ""
 "$(cd "$(dirname "$0")" && pwd)/unlink-claude.sh"
 
 echo ""
+"$(cd "$(dirname "$0")" && pwd)/unlink-codex.sh"
+
+echo ""
 "$(cd "$(dirname "$0")" && pwd)/unlink-opencode.sh"
 
 echo ""

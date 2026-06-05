@@ -46,6 +46,12 @@ create_symlink "$HOME/.config/opencode/superpowers/skills" \
                "$HOME/.config/opencode/skills/superpowers" \
                "Superpowers skills"
 
+for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
+    [[ -d "$skill_dir" ]] || continue
+    skill_name=$(basename "$skill_dir")
+    create_symlink "$skill_dir" "$HOME/.config/opencode/skills/$skill_name" "Personal skill: $skill_name"
+done
+
 echo ""
 echo "  ℹ️  Restart OpenCode to load the plugin and skills"
 echo ""
