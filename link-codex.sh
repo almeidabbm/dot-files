@@ -5,6 +5,20 @@
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
 
+resolve_codex_cli() {
+    if command -v codex >/dev/null 2>&1; then
+        command -v codex
+        return 0
+    fi
+
+    if [[ -x "/Applications/Codex.app/Contents/Resources/codex" ]]; then
+        echo "/Applications/Codex.app/Contents/Resources/codex"
+        return 0
+    fi
+
+    return 1
+}
+
 create_symlink() {
     local source="$1"
     local target="$2"
@@ -31,9 +45,19 @@ done
 echo ""
 echo "📦 Setting up required plugins..."
 
-codex plugin add superpowers@openai-curated 2>/dev/null && \
-    echo "  ✅ superpowers plugin installed" || \
-    echo "  ⚠️  superpowers plugin already installed or failed"
+CODEX_CLI="$(resolve_codex_cli)"
+
+if [[ -n "$CODEX_CLI" ]]; then
+    "$CODEX_CLI" plugin add superpowers@openai-curated >/dev/null 2>&1 || true
+
+    if "$CODEX_CLI" plugin list 2>/dev/null | grep -Eq "^superpowers@openai-curated[[:space:]]+installed, enabled"; then
+        echo "  ✅ superpowers plugin installed"
+    else
+        echo "  ⚠️  superpowers plugin is not installed"
+    fi
+else
+    echo "  ⚠️  Codex CLI not found; could not install superpowers plugin"
+fi
 
 echo ""
 echo "  ℹ️  If plugin commands failed, run:"
