@@ -2,13 +2,17 @@
 
 # Script to unlink and remove OpenCode superpowers configuration.
 
+DOTFILES_DIR="$HOME/Develop/dot-files"
+
 remove_symlink() {
     local target="$1"
     local description="$2"
 
     if [[ -L "$target" ]]; then
         local link_target=$(readlink "$target")
-        if [[ "$link_target" == *"$HOME/.config/opencode"* ]] || [[ "$link_target" == *"/dot-files/.ai/"* ]]; then
+        # Managed links point either into OpenCode's superpowers checkout or
+        # into this dot-files repo (shared rules and personal skills).
+        if [[ "$link_target" == *"$HOME/.config/opencode"* ]] || [[ "$link_target" == *"$DOTFILES_DIR"* ]]; then
             echo "  🗑️  Removing: $target -> $link_target"
             rm "$target"
         else
@@ -38,7 +42,7 @@ fi
 
 echo ""
 echo "👤 Removing personal skills from dot-files..."
-for skill in "$HOME/Develop/dot-files/.ai/skills"/*; do
+for skill in "$DOTFILES_DIR/.ai/skills"/*; do
     if [[ -d "$skill" ]]; then
         skill_name=$(basename "$skill")
         remove_symlink "$HOME/.config/opencode/skills/$skill_name" "Skill: $skill_name"

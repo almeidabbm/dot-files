@@ -11,7 +11,7 @@ remove_symlink() {
 
     if [[ -L "$target" ]]; then
         local link_target=$(readlink "$target")
-        if [[ "$link_target" == *"$HOME/Develop/dot-files"* ]]; then
+        if [[ "$link_target" == *"$DOTFILES_DIR"* ]]; then
             echo "  ❌ Removing: $target -> $link_target"
             rm "$target"
         else
