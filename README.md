@@ -51,29 +51,13 @@ Claude uses the shared workflow rules from [`.ai/shared-instructions.md`](.ai/sh
 
 **Shared repo workflow skills** live in [`.ai/skills/`](.ai/skills/) and are symlinked into Claude's native skills folder by `link-claude.sh`.
 
-**Skills**:
-
-| Command          | What it does                                                                                                                |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `/start-task`    | On-ramp for a new piece of work. Creates `.local/active/<slug>/` with 4 templated files and auto-detects task size.         |
-| `/status`        | "Where was I?" — read-only view of every active task with status, size, and next-step suggestion.                           |
-| `/pre-merge`     | Pre-merge confidence gate. Adversarial review + hardening checklist against spec, plan, system-map, and the diff.           |
-| `/archive-task`  | Lifecycle close-out. Moves `active/<slug>/` → `archive/<slug>/`, optionally graduates spec/runbook to `docs/`.              |
-| `/code-review`   | Reviews a PR or Graphite stack. Checks correctness, security, types, architecture. Composes with `/pre-merge`.              |
+**Skills:** Claude surfaces the shared workflow skills as slash commands — `/start-task`, `/status`, `/pre-merge`, `/archive-task`, `/code-review`. See the [shared skills table](#shared-source).
 
 ### Codex
 
 Codex uses the same shared workflow rules from [`.ai/shared-instructions.md`](.ai/shared-instructions.md), symlinked into Codex's native `~/.codex/AGENTS.md` location by `link-codex.sh`.
 
-**Shared repo workflow skills** live once in [`.ai/skills/`](.ai/skills/) and are symlinked into `~/.codex/skills/` by `link-codex.sh`.
-
-| Skill            | What it does                                                                                                                |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `start-task`     | Creates `.local/active/<slug>/` with templated task files and detected size.                                               |
-| `status`         | Summarizes active tasks and the next likely step.                                                                           |
-| `pre-merge`      | Runs a production-safety gate against spec, plan, system-map, and diff.                                                    |
-| `archive-task`   | Moves completed task memory into `archive/` and offers doc or system-map graduation.                                       |
-| `code-review`    | Reviews a diff, branch, or PR for correctness, security, types, architecture, and tests.                                  |
+**Shared repo workflow skills** live once in [`.ai/skills/`](.ai/skills/) and are symlinked into `~/.codex/skills/` by `link-codex.sh`. Codex loads the same five skills (see the [shared skills table](#shared-source)).
 
 **Plugin install:** `link-codex.sh` installs native Superpowers with `codex plugin add superpowers@openai-curated`.
 
@@ -93,6 +77,16 @@ The reusable workflow content is agent-agnostic and lives in:
 
 - [`.ai/shared-instructions.md`](.ai/shared-instructions.md) for durable global workflow rules
 - [`.ai/skills/`](.ai/skills/) for reusable task workflows
+
+The five shared skills (slash commands in Claude — `/start-task` etc.; skills of the same name in Codex and OpenCode):
+
+| Skill          | What it does                                                                                                       |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `start-task`   | On-ramp for new work. Creates `.local/active/<slug>/` with 4 templated files and a detected size.                  |
+| `status`       | Read-only view of every active task with status, size, and next-step suggestion.                                  |
+| `pre-merge`    | Production-safety gate: adversarial review + hardening checklist against spec, plan, system-map, and the diff.     |
+| `archive-task` | Lifecycle close-out. Moves `active/<slug>/` → `archive/<slug>/`, optionally graduates docs to the repo.           |
+| `code-review`  | Reviews a diff, branch, or PR for correctness, security, types, architecture, and tests.                          |
 
 The link scripts project those shared files into each tool's native structure:
 
