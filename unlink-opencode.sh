@@ -8,7 +8,7 @@ remove_symlink() {
 
     if [[ -L "$target" ]]; then
         local link_target=$(readlink "$target")
-        if [[ "$link_target" == *"$HOME/.config/opencode"* ]]; then
+        if [[ "$link_target" == *"$HOME/.config/opencode"* ]] || [[ "$link_target" == *"/dot-files/.ai/"* ]]; then
             echo "  🗑️  Removing: $target -> $link_target"
             rm "$target"
         else
