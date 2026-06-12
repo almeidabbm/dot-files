@@ -31,6 +31,53 @@ git clone <repo-url> ~/Develop/dot-files
 
 ---
 
+## How it works
+
+### One source, every agent
+
+The workflow content is written **once** under `.ai/` and projected into each tool's native location by the `link-*.sh` scripts. Editing `.ai/` updates every agent at once (they read through symlinks); only the upstream Superpowers plugin and the Claude-only guard hook differ per tool.
+
+```mermaid
+flowchart LR
+    rules["shared-instructions.md<br/>(workflow rules)"]
+    skills[".ai/skills/<br/>(5 task skills)"]
+    hooks[".ai/hooks/<br/>(git trunk guard)"]
+
+    subgraph links["link-*.sh — symlink + jq-merge"]
+        lc["link-claude"]
+        lx["link-codex"]
+        lo["link-opencode"]
+    end
+
+    rules --> lc & lx & lo
+    skills --> lc & lx & lo
+    hooks --> lc
+
+    lc --> claude["Claude Code<br/>~/.claude/CLAUDE.md<br/>~/.claude/skills/<br/>settings.json hook"]
+    lx --> codex["Codex<br/>~/.codex/AGENTS.md<br/>~/.codex/skills/"]
+    lo --> opencode["OpenCode<br/>~/.config/opencode/AGENTS.md<br/>~/.config/opencode/skills/"]
+```
+
+### The task workflow
+
+The skills drive a small lifecycle on top of per-task working memory at `.local/active/<slug>/` (gitignored). The `notes.md` frontmatter `status` is the source of truth for where a task is; the trunk guard makes the "never touch `main`" rule deterministic.
+
+```mermaid
+flowchart TD
+    new([new work / issue]) --> st["/start-task<br/>creates .local/active/&lt;slug&gt;/"]
+    st --> spec["spec.md + plan.md<br/>status: spec → plan"]
+    spec --> impl["implement on a feature branch<br/>status: implementing"]
+    impl --> pm["/pre-merge<br/>writes review.md"]
+    pm -->|blocking issues| impl
+    pm -->|clean → ready-to-ship| cr["/code-review<br/>optional diff-quality pass"]
+    cr --> ship["push / submit PR<br/>feature push OK · main blocked by guard"]
+    ship --> arch["/archive-task<br/>active/ → archive/"]
+    st -.->|"where was I?"| status["/status<br/>read-only task view"]
+    impl -.-> status
+```
+
+---
+
 ## What's inside
 
 ### Claude Code
