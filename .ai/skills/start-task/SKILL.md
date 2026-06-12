@@ -9,6 +9,8 @@ Create the per-task working-memory folder under `.local/active/<slug>/` with fou
 
 This skill only sets up the task folder. Do not automatically start design or implementation work unless the user asks for it next.
 
+> The shared workflow rules (your global agent rules) are the source of truth for the `.local/active/` layout and the `notes.md` frontmatter schema. The templates below implement that convention; if the two ever disagree, follow the shared rules.
+
 ## 1. Determine the slug
 
 Use `YYYY-MM-DD-<kebab-feature-name>`. Planning-only tasks use `YYYY-MM-DD-plan-<project-name>`.

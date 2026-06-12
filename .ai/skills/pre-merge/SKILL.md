@@ -7,6 +7,8 @@ description: Use before merging your own work to verify production safety. Revie
 
 Run a production-safety review of the current task. This is broader than ordinary code review and focuses on failure modes, rollout safety, and operational readiness.
 
+> The shared workflow rules (your global agent rules) are the source of truth for the `.local/active/` layout and task statuses referenced below.
+
 ## Inputs
 
 1. The current task: the most recently modified folder under `.local/active/`

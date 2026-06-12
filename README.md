@@ -31,6 +31,53 @@ git clone <repo-url> ~/Develop/dot-files
 
 ---
 
+## How it works
+
+### One source, every agent
+
+The workflow content is written **once** under `.ai/` and projected into each tool's native location by the `link-*.sh` scripts. Editing `.ai/` updates every agent at once (they read through symlinks); only the upstream Superpowers plugin and the Claude-only guard hook differ per tool.
+
+```mermaid
+flowchart LR
+    rules["shared-instructions.md<br/>(workflow rules)"]
+    skills[".ai/skills/<br/>(5 task skills)"]
+    hooks[".ai/hooks/<br/>(git trunk guard)"]
+
+    subgraph links["link-*.sh — symlink + jq-merge"]
+        lc["link-claude"]
+        lx["link-codex"]
+        lo["link-opencode"]
+    end
+
+    rules --> lc & lx & lo
+    skills --> lc & lx & lo
+    hooks --> lc
+
+    lc --> claude["Claude Code<br/>~/.claude/CLAUDE.md<br/>~/.claude/skills/<br/>settings.json hook"]
+    lx --> codex["Codex<br/>~/.codex/AGENTS.md<br/>~/.codex/skills/"]
+    lo --> opencode["OpenCode<br/>~/.config/opencode/AGENTS.md<br/>~/.config/opencode/skills/"]
+```
+
+### The task workflow
+
+The skills drive a small lifecycle on top of per-task working memory at `.local/active/<slug>/` (gitignored). The `notes.md` frontmatter `status` is the source of truth for where a task is; the trunk guard makes the "never touch `main`" rule deterministic.
+
+```mermaid
+flowchart TD
+    new([new work / issue]) --> st["/start-task<br/>creates .local/active/&lt;slug&gt;/"]
+    st --> spec["spec.md + plan.md<br/>status: spec → plan"]
+    spec --> impl["implement on a feature branch<br/>status: implementing"]
+    impl --> pm["/pre-merge<br/>writes review.md"]
+    pm -->|blocking issues| impl
+    pm -->|clean → ready-to-ship| cr["/code-review<br/>optional diff-quality pass"]
+    cr --> ship["push / submit PR<br/>feature push OK · main blocked by guard"]
+    ship --> arch["/archive-task<br/>active/ → archive/"]
+    st -.->|"where was I?"| status["/status<br/>read-only task view"]
+    impl -.-> status
+```
+
+---
+
 ## What's inside
 
 ### Claude Code
@@ -51,33 +98,25 @@ Claude uses the shared workflow rules from [`.ai/shared-instructions.md`](.ai/sh
 
 **Shared repo workflow skills** live in [`.ai/skills/`](.ai/skills/) and are symlinked into Claude's native skills folder by `link-claude.sh`.
 
-**Skills**:
-
-| Command          | What it does                                                                                                                |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `/start-task`    | On-ramp for a new piece of work. Creates `.local/active/<slug>/` with 4 templated files and auto-detects task size.         |
-| `/status`        | "Where was I?" — read-only view of every active task with status, size, and next-step suggestion.                           |
-| `/pre-merge`     | Pre-merge confidence gate. Adversarial review + hardening checklist against spec, plan, system-map, and the diff.           |
-| `/archive-task`  | Lifecycle close-out. Moves `active/<slug>/` → `archive/<slug>/`, optionally graduates spec/runbook to `docs/`.              |
-| `/code-review`   | Reviews a PR or Graphite stack. Checks correctness, security, types, architecture. Composes with `/pre-merge`.              |
+**Skills:** Claude surfaces the shared workflow skills as slash commands — `/start-task`, `/status`, `/pre-merge`, `/archive-task`, `/code-review`. See the [shared skills table](#shared-source).
 
 ### Codex
 
 Codex uses the same shared workflow rules from [`.ai/shared-instructions.md`](.ai/shared-instructions.md), symlinked into Codex's native `~/.codex/AGENTS.md` location by `link-codex.sh`.
 
-**Shared repo workflow skills** live once in [`.ai/skills/`](.ai/skills/) and are symlinked into `~/.codex/skills/` by `link-codex.sh`.
-
-| Skill            | What it does                                                                                                                |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `start-task`     | Creates `.local/active/<slug>/` with templated task files and detected size.                                               |
-| `status`         | Summarizes active tasks and the next likely step.                                                                           |
-| `pre-merge`      | Runs a production-safety gate against spec, plan, system-map, and diff.                                                    |
-| `archive-task`   | Moves completed task memory into `archive/` and offers doc or system-map graduation.                                       |
-| `code-review`    | Reviews a diff, branch, or PR for correctness, security, types, architecture, and tests.                                  |
+**Shared repo workflow skills** live once in [`.ai/skills/`](.ai/skills/) and are symlinked into `~/.codex/skills/` by `link-codex.sh`. Codex loads the same five skills (see the [shared skills table](#shared-source)).
 
 **Plugin install:** `link-codex.sh` installs native Superpowers with `codex plugin add superpowers@openai-curated`.
 
 If `superpowers` is installed in Codex, these task files are the integration point: `spec.md` and `plan.md` remain the source of truth for this workflow.
+
+### OpenCode
+
+OpenCode uses the same shared workflow rules from [`.ai/shared-instructions.md`](.ai/shared-instructions.md), symlinked into OpenCode's native `~/.config/opencode/AGENTS.md` location by `link-opencode.sh`.
+
+**Shared repo workflow skills** live once in [`.ai/skills/`](.ai/skills/) and are symlinked into `~/.config/opencode/skills/` by `link-opencode.sh`.
+
+**Plugin install:** `link-opencode.sh` clones [superpowers](https://github.com/obra/superpowers) into `~/.config/opencode/superpowers` and symlinks its plugin and skills into OpenCode.
 
 ### Shared Source
 
@@ -86,11 +125,33 @@ The reusable workflow content is agent-agnostic and lives in:
 - [`.ai/shared-instructions.md`](.ai/shared-instructions.md) for durable global workflow rules
 - [`.ai/skills/`](.ai/skills/) for reusable task workflows
 
+The five shared skills (slash commands in Claude — `/start-task` etc.; skills of the same name in Codex and OpenCode):
+
+| Skill          | What it does                                                                                                       |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `start-task`   | On-ramp for new work. Creates `.local/active/<slug>/` with 4 templated files and a detected size.                  |
+| `status`       | Read-only view of every active task with status, size, and next-step suggestion.                                  |
+| `pre-merge`    | Production-safety gate: adversarial review + hardening checklist against spec, plan, system-map, and the diff.     |
+| `archive-task` | Lifecycle close-out. Moves `active/<slug>/` → `archive/<slug>/`, optionally graduates docs to the repo.           |
+| `code-review`  | Reviews a diff, branch, or PR for correctness, security, types, architecture, and tests.                          |
+
 The link scripts project those shared files into each tool's native structure:
 
 - Claude Code -> `~/.claude/CLAUDE.md` and `~/.claude/skills/`
 - Codex -> `~/.codex/AGENTS.md` and `~/.codex/skills/`
-- OpenCode -> `~/.config/opencode/skills/`
+- OpenCode -> `~/.config/opencode/AGENTS.md` and `~/.config/opencode/skills/`
+
+> **Superpowers is installed from a different source per tool**, so versions can drift:
+>
+> - Claude Code -> `superpowers@claude-plugins-official` (marketplace)
+> - Codex -> `superpowers@openai-curated` (marketplace)
+> - OpenCode -> cloned from [`obra/superpowers`](https://github.com/obra/superpowers) `main`
+>
+> The shared rules and `.ai/skills/` are identical everywhere; only the upstream Superpowers plugin can differ.
+
+### Enforcement
+
+`link-claude.sh` also registers a `PreToolUse` hook ([`.ai/hooks/guard-git-trunk.sh`](.ai/hooks/guard-git-trunk.sh)) that deterministically blocks committing to or pushing `main`/`master`/`trunk`. Advisory rules in `shared-instructions.md` can be drifted past mid-session; the hook cannot. It is Claude-specific and merged idempotently into `~/.claude/settings.json` (a backup is kept); `unlink-claude.sh` removes only that entry.
 
 ---
 
@@ -158,6 +219,7 @@ Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/rom
 | `link-opencode.sh` | Symlink only OpenCode config                   |
 | `unlink-opencode.sh` | Remove only OpenCode symlinks                |
 | `list-symlink.sh`  | List all active symlinks pointing to this repo |
+| `doctor.sh`        | Read-only health check: verify expected symlinks resolve (exits non-zero on failure) |
 
 ## Prerequisites
 

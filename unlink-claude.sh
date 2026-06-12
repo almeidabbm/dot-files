@@ -11,7 +11,7 @@ remove_symlink() {
 
     if [[ -L "$target" ]]; then
         local link_target=$(readlink "$target")
-        if [[ "$link_target" == *"$HOME/Develop/dot-files"* ]]; then
+        if [[ "$link_target" == *"$DOTFILES_DIR"* ]]; then
             echo "  ❌ Removing: $target -> $link_target"
             rm "$target"
         else
@@ -24,8 +24,38 @@ remove_symlink() {
     fi
 }
 
+# Remove the git trunk guard PreToolUse hook from the global settings,
+# leaving every other hook and setting untouched.
+remove_git_guard_hook() {
+    local settings="$HOME/.claude/settings.json"
+    local marker="guard-git-trunk.sh"
+
+    command -v jq >/dev/null 2>&1 || return
+    [[ -f "$settings" ]] || return
+
+    local count
+    count=$(jq --arg m "$marker" '[.. | .command? // empty | select(contains($m))] | length' "$settings" 2>/dev/null || echo 0)
+    if [[ "${count:-0}" -eq 0 ]]; then
+        echo "  ✅ Git guard hook already absent"
+        return
+    fi
+
+    local tmp
+    tmp=$(mktemp)
+    if jq --arg m "$marker" \
+        '(.hooks.PreToolUse) |= (map(select(((.hooks // []) | map(.command // "") | any(contains($m))) | not)))' \
+        "$settings" > "$tmp" 2>/dev/null && jq empty "$tmp" 2>/dev/null; then
+        mv "$tmp" "$settings"
+        echo "  🗑️  Removed git guard hook"
+    else
+        rm -f "$tmp"
+        echo "  ⚠️  Failed to remove git guard hook (settings.json left unchanged)"
+    fi
+}
+
 echo "🤖 Cleaning up Claude Code symlinks..."
 remove_symlink "$HOME/.claude/CLAUDE.md" "Claude global rules"
+remove_git_guard_hook
 
 # Remove every shared skill folder symlinked into Claude
 for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do

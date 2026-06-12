@@ -2,13 +2,17 @@
 
 # Script to unlink and remove OpenCode superpowers configuration.
 
+DOTFILES_DIR="$HOME/Develop/dot-files"
+
 remove_symlink() {
     local target="$1"
     local description="$2"
 
     if [[ -L "$target" ]]; then
         local link_target=$(readlink "$target")
-        if [[ "$link_target" == *"$HOME/.config/opencode"* ]]; then
+        # Managed links point either into OpenCode's superpowers checkout or
+        # into this dot-files repo (shared rules and personal skills).
+        if [[ "$link_target" == *"$HOME/.config/opencode"* ]] || [[ "$link_target" == *"$DOTFILES_DIR"* ]]; then
             echo "  🗑️  Removing: $target -> $link_target"
             rm "$target"
         else
@@ -26,9 +30,19 @@ echo "🗑️  Removing OpenCode superpowers..."
 remove_symlink "$HOME/.config/opencode/plugins/superpowers.js" "Superpowers plugin"
 remove_symlink "$HOME/.config/opencode/skills/superpowers" "Superpowers skills"
 
+agents_link="$HOME/.config/opencode/AGENTS.md"
+if [[ -L "$agents_link" ]] && [[ "$(readlink "$agents_link")" == *"/.ai/shared-instructions.md" ]]; then
+    echo "  🗑️  Removing: $agents_link -> $(readlink "$agents_link")"
+    rm "$agents_link"
+elif [[ -e "$agents_link" ]]; then
+    echo "  ⚠️  Skipping: $agents_link (exists but is not our symlink)"
+else
+    echo "  ✅ Already clean: $agents_link"
+fi
+
 echo ""
 echo "👤 Removing personal skills from dot-files..."
-for skill in "$HOME/Develop/dot-files/.ai/skills"/*; do
+for skill in "$DOTFILES_DIR/.ai/skills"/*; do
     if [[ -d "$skill" ]]; then
         skill_name=$(basename "$skill")
         remove_symlink "$HOME/.config/opencode/skills/$skill_name" "Skill: $skill_name"

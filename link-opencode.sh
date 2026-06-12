@@ -35,6 +35,10 @@ echo "🔗 Creating symlinks..."
 mkdir -p "$HOME/.config/opencode/plugins"
 mkdir -p "$HOME/.config/opencode/skills"
 
+create_symlink "$DOTFILES_DIR/.ai/shared-instructions.md" \
+               "$HOME/.config/opencode/AGENTS.md" \
+               "OpenCode global rules"
+
 rm -f "$HOME/.config/opencode/plugins/superpowers.js"
 rm -rf "$HOME/.config/opencode/skills/superpowers"
 

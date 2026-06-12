@@ -5,7 +5,7 @@
 - Never commit directly to `main` or trunk. Before making any commits, check the current branch with `git branch --show-current`. If you are on `main`, create a branch first.
 - Prefer Graphite CLI (`gt`) for branch management when available; fall back to plain `git` when it is not.
 - Use `gt create -m "branch-name"` for stacked branches when `gt` is available. Use `git checkout -b branch-name` for independent work or as the fallback.
-- Never push or submit (`git push`, `gt submit`) without explicit permission. Local commits are fine; remote actions require approval.
+- Never push or force-push to `main` or trunk directly. Pushing feature/stacked branches and submitting PRs (`git push`, `gt submit`) is fine and does not require asking first.
 - Always sync trunk before starting new work: `gt sync` if available, otherwise `git fetch origin && git checkout main && git pull --rebase`.
 
 ## Graphite Availability
@@ -85,9 +85,9 @@ last-updated: <ISO timestamp>
 
 ## Spec And Plan Files
 
-- Specs for the current task belong in `$(git rev-parse --show-toplevel)/.local/active/<current-slug>/spec.md`.
-- Plans for the current task belong in `$(git rev-parse --show-toplevel)/.local/active/<current-slug>/plan.md`.
-- Do not save task specs or plans to `docs/`, external folders, or any other repo-tracked location while the task is still active.
+- Specs and plans for the current task live in `.local/active/<current-slug>/spec.md` and `plan.md`, where the current slug is the most recently modified folder under `.local/active/`.
+- These paths override the default output locations of planning-oriented Superpowers workflows. Do not save task specs or plans to `docs/`, `docs/plans/`, `../<repo>_plans/`, or any other external or repo-tracked location while the task is active.
+- If `.local/active/` is empty, start the task first before writing a spec or plan.
 - If `superpowers` is installed, it can help draft specs or plans, but these task-local files remain the source of truth.
 
 ## Per-Repo Gitignore
@@ -100,30 +100,6 @@ Every repo using this workflow should gitignore the working-memory and worktree 
 ```
 
 - Keep these rules version-controlled in the repo rather than relying on a global excludes file.
-
-## Superpowers Overrides
-
-These rules override the default output location of planning-oriented Superpowers workflows.
-
-### Branch Management
-
-- Prefer `gt create -m "<branch-name>"` when `gt` is available; otherwise fall back to `git checkout -b`.
-- Prefer `gt submit` with permission when available; otherwise use `git push` only with permission.
-- Prefer `gt log` when available; otherwise use `git log --oneline --graph --decorate --all -20`.
-
-### Plan Files
-
-- Plans for the current task are written to `$(git rev-parse --show-toplevel)/.local/active/<current-slug>/plan.md`.
-- The current slug is the most recently modified folder under `.local/active/`.
-- If `.local/active/` is empty, start the task first before writing a plan.
-- Do not save plans to `docs/plans/`, `../<repo>_plans/`, or other external folders.
-
-### Spec Files
-
-- Specs for the current task are written to `$(git rev-parse --show-toplevel)/.local/active/<current-slug>/spec.md`.
-- The current slug is the most recently modified folder under `.local/active/`.
-- If `.local/active/` is empty, start the task first before writing a spec.
-- Do not save specs to repo-tracked design folders while the task is still active.
 
 ## Code Style
 
