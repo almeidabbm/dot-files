@@ -90,7 +90,7 @@ The link scripts project those shared files into each tool's native structure:
 
 - Claude Code -> `~/.claude/CLAUDE.md` and `~/.claude/skills/`
 - Codex -> `~/.codex/AGENTS.md` and `~/.codex/skills/`
-- OpenCode -> `~/.config/opencode/skills/`
+- OpenCode -> `~/.config/opencode/AGENTS.md` and `~/.config/opencode/skills/`
 
 ---
 
