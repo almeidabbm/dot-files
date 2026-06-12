@@ -79,6 +79,14 @@ Codex uses the same shared workflow rules from [`.ai/shared-instructions.md`](.a
 
 If `superpowers` is installed in Codex, these task files are the integration point: `spec.md` and `plan.md` remain the source of truth for this workflow.
 
+### OpenCode
+
+OpenCode uses the same shared workflow rules from [`.ai/shared-instructions.md`](.ai/shared-instructions.md), symlinked into OpenCode's native `~/.config/opencode/AGENTS.md` location by `link-opencode.sh`.
+
+**Shared repo workflow skills** live once in [`.ai/skills/`](.ai/skills/) and are symlinked into `~/.config/opencode/skills/` by `link-opencode.sh`.
+
+**Plugin install:** `link-opencode.sh` clones [superpowers](https://github.com/obra/superpowers) into `~/.config/opencode/superpowers` and symlinks its plugin and skills into OpenCode.
+
 ### Shared Source
 
 The reusable workflow content is agent-agnostic and lives in:
