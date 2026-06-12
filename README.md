@@ -100,6 +100,18 @@ The link scripts project those shared files into each tool's native structure:
 - Codex -> `~/.codex/AGENTS.md` and `~/.codex/skills/`
 - OpenCode -> `~/.config/opencode/AGENTS.md` and `~/.config/opencode/skills/`
 
+> **Superpowers is installed from a different source per tool**, so versions can drift:
+>
+> - Claude Code -> `superpowers@claude-plugins-official` (marketplace)
+> - Codex -> `superpowers@openai-curated` (marketplace)
+> - OpenCode -> cloned from [`obra/superpowers`](https://github.com/obra/superpowers) `main`
+>
+> The shared rules and `.ai/skills/` are identical everywhere; only the upstream Superpowers plugin can differ.
+
+### Enforcement
+
+`link-claude.sh` also registers a `PreToolUse` hook ([`.ai/hooks/guard-git-trunk.sh`](.ai/hooks/guard-git-trunk.sh)) that deterministically blocks committing to or pushing `main`/`master`/`trunk`. Advisory rules in `shared-instructions.md` can be drifted past mid-session; the hook cannot. It is Claude-specific and merged idempotently into `~/.claude/settings.json` (a backup is kept); `unlink-claude.sh` removes only that entry.
+
 ---
 
 ### AI-Native Engineering Workflow
