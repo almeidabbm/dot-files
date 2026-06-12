@@ -166,6 +166,7 @@ Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/rom
 | `link-opencode.sh` | Symlink only OpenCode config                   |
 | `unlink-opencode.sh` | Remove only OpenCode symlinks                |
 | `list-symlink.sh`  | List all active symlinks pointing to this repo |
+| `doctor.sh`        | Read-only health check: verify expected symlinks resolve (exits non-zero on failure) |
 
 ## Prerequisites
 
