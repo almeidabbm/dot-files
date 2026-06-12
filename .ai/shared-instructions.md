@@ -5,7 +5,7 @@
 - Never commit directly to `main` or trunk. Before making any commits, check the current branch with `git branch --show-current`. If you are on `main`, create a branch first.
 - Prefer Graphite CLI (`gt`) for branch management when available; fall back to plain `git` when it is not.
 - Use `gt create -m "branch-name"` for stacked branches when `gt` is available. Use `git checkout -b branch-name` for independent work or as the fallback.
-- Never push or submit (`git push`, `gt submit`) without explicit permission. Local commits are fine; remote actions require approval.
+- Never push or force-push to `main` or trunk directly. Pushing feature/stacked branches and submitting PRs (`git push`, `gt submit`) is fine and does not require asking first.
 - Always sync trunk before starting new work: `gt sync` if available, otherwise `git fetch origin && git checkout main && git pull --rebase`.
 
 ## Graphite Availability
