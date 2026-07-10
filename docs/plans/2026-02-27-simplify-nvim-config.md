@@ -1,7 +1,5 @@
 # Simplify Neovim Config Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Simplify the existing nvim config by removing unnecessary plugins, switching to Space leader, adding Harpoon/diffview/git-conflict/claudecode.nvim/catppuccin, replacing nvim-cmp with Neovim 0.11 native completion, replacing none-ls with conform.nvim, and creating a keybindings cheatsheet.
 
 **Architecture:** Modular lazy.nvim config with `lua/config/` for core settings and `lua/plugins/` for plugin specs. We simplify by leveraging Neovim 0.11's built-in LSP completion, removing nvim-tree (use Telescope + Harpoon instead), removing alpha dashboard, and replacing none-ls with the simpler conform.nvim. We add diffview.nvim + git-conflict.nvim for merge workflows, harpoon for file navigation, claudecode.nvim for Claude Code CLI integration, and catppuccin theme.

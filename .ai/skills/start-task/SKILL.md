@@ -124,9 +124,8 @@ Show:
 
 Suggested next moves:
 
-- design the spec in `spec.md`
-- write the implementation plan in `plan.md`
-- if `superpowers` is installed, use its planning workflows to fill those files
+- design the spec in `spec.md` - interview the user about goal, scope (in / out), and success criteria before proposing a design
+- write the implementation plan in `plan.md` - use the tool's native plan mode to explore, then save the approved plan there
 
 ## Edge cases
 

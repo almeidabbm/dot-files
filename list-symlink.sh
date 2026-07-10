@@ -19,9 +19,6 @@ if [[ -f "$DOTFILES_DIR/.ai/shared-instructions.md" ]]; then
     targets+=("$HOME/.codex/AGENTS.md|Codex global rules")
 fi
 
-targets+=("$HOME/.config/opencode/plugins/superpowers.js|OpenCode superpowers plugin")
-targets+=("$HOME/.config/opencode/skills/superpowers|OpenCode superpowers skills")
-
 for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
     [[ -d "$skill_dir" ]] || continue
     skill_name=$(basename "$skill_dir")

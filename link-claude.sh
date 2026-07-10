@@ -63,18 +63,6 @@ for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
 done
 
 echo ""
-echo "📦 Setting up required plugins..."
-
-# Install superpowers plugin from official marketplace
-claude plugin install superpowers@claude-plugins-official 2>/dev/null && \
-    echo "  ✅ superpowers plugin installed" || \
-    echo "  ⚠️  superpowers plugin already installed or failed"
-
-echo ""
-echo "  ℹ️  If plugin commands failed, run inside Claude Code:"
-echo "     /plugin install superpowers@claude-plugins-official"
-
-echo ""
 echo "🪝 Installing git guard hook..."
 install_git_guard_hook
 
