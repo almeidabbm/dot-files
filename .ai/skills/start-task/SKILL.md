@@ -1,6 +1,6 @@
 ---
 name: start-task
-description: Use when starting new work such as a feature, bugfix, refactor, investigation, or planning task; when the user mentions an issue ID; or when they say they want to begin working on something. Creates .local/active/<slug>/ with templated task files and a detected size.
+description: Use when starting new work such as a feature, bugfix, refactor, investigation, or planning task; when the user mentions a ticket link or issue ID; or when they say they want to begin working on something. Creates .local/active/<slug>/ with templated task files and a detected size.
 ---
 
 # Start Task
@@ -18,10 +18,21 @@ Use `YYYY-MM-DD-<kebab-feature-name>`. Planning-only tasks use `YYYY-MM-DD-plan-
 Resolution order:
 
 1. If the user gives a task name, turn it into a slug.
-2. If an issue title is available, propose a slug based on it.
+2. If a ticket title is available, propose a slug based on it.
 3. If the task is still unclear, ask one concise question before creating anything.
 
 Always confirm the slug before creating the folder.
+
+## 1b. Ingest the ticket, if one was provided
+
+If the user gave a ticket link or ID (any tracker — Linear, GitHub Issues, or other):
+
+1. Fetch it once, using whatever access this session has: an MCP tool, `gh issue view`, or ask the user to paste the content.
+2. Summarize the problem statement into `spec.md`'s Goal section, with a source line: `Fetched from <link> on <date>`.
+3. Do not copy the full ticket. The ticket owns the problem statement; `spec.md` records the link plus the delta it lacks — scope (in / out), success criteria, chosen approach. List missing pieces under Open questions.
+4. For `quick` tasks, the ticket link plus a one-line goal is enough.
+
+If the ticket cannot be fetched, record the link anyway and continue; the spec design step fills the gaps with the user.
 
 ## 2. Detect task size
 
@@ -69,7 +80,7 @@ Use these contents.
 
 **Status:** spec
 **Created:** YYYY-MM-DD
-**Linear:** <issue-id-or-empty>
+**Ticket:** <link-or-empty>
 
 ## Goal
 _To be defined during design._
@@ -94,7 +105,7 @@ _To be populated once the spec is clear and approved._
 ```markdown
 ---
 slug: <slug>
-linear: <issue-id-or-empty>
+ticket: <link-or-id-or-empty>
 size: <detected-size>
 status: spec
 last-updated: <ISO timestamp>

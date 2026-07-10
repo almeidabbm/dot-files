@@ -64,7 +64,7 @@ The skills drive a small lifecycle on top of per-task working memory at `.local/
 
 ```mermaid
 flowchart TD
-    new([new work / issue]) --> st["/start-task<br/>creates .local/active/&lt;slug&gt;/"]
+    new([new work / ticket]) --> st["/start-task<br/>creates .local/active/&lt;slug&gt;/"]
     st --> spec["spec.md + plan.md<br/>status: spec → plan"]
     spec --> impl["implement on a feature branch<br/>status: implementing"]
     impl --> pm["/pre-merge<br/>writes review.md"]
@@ -119,7 +119,7 @@ The five shared skills (slash commands in Claude — `/start-task` etc.; skills 
 
 | Skill          | What it does                                                                                                       |
 | -------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `start-task`   | On-ramp for new work. Creates `.local/active/<slug>/` with 4 templated files and a detected size.                  |
+| `start-task`   | On-ramp for new work. Creates `.local/active/<slug>/` with 4 templated files and a detected size; ingests a ticket link (any tracker) into the spec when given one. |
 | `status`       | Read-only view of every active task with status, size, and next-step suggestion.                                  |
 | `pre-merge`    | Production-safety gate: adversarial review + hardening checklist against spec, plan, system-map, and the diff.     |
 | `archive-task` | Lifecycle close-out. Moves `active/<slug>/` → `archive/<slug>/`, optionally graduates docs to the repo.           |
@@ -145,9 +145,9 @@ These shared skills plus the shared instructions file form a small, self-contain
 
 **Per-task working memory** at `.local/active/<slug>/`:
 
-- `spec.md` — the what and why (goal, scope, success criteria), agreed with the human before planning
+- `spec.md` — the what and why (goal, scope, success criteria), agreed with the human before planning. When a ticket exists (Linear, GitHub Issues, or any tracker), the ticket owns the problem statement: the spec links to it, summarizes it once (with fetch date), and records only the delta — scope, success criteria, chosen approach.
 - `plan.md` — the how, drafted in the tool's native plan mode (Claude Plan Mode, Codex plan mode, OpenCode's plan agent) and saved here once approved
-- `notes.md` — front-matter (slug, linear, size, status, last-updated) + running log
+- `notes.md` — front-matter (slug, ticket, size, status, last-updated) + running log
 - `review.md` — written by `/pre-merge`
 
 **Durable architectural intelligence** at `.local/system-map/` (prefixed filenames: `inv-`, `area-`, `danger-`, `pitfall-`). Grows as tasks archive.

@@ -11,7 +11,7 @@ Produce a read-only summary of active tasks from `.local/active/`.
 
 1. Resolve the repo root with `git rev-parse --show-toplevel`.
 2. Read every `.local/active/*/notes.md`.
-3. Parse frontmatter fields: `slug`, `linear`, `size`, `status`, and `last-updated`.
+3. Parse frontmatter fields: `slug`, `ticket`, `size`, `status`, and `last-updated`.
 4. Use file mtime to decide which task is current.
 5. Build one next-step suggestion per task based on status.
 
@@ -34,7 +34,7 @@ Format each task like:
 
 ```text
 ▸ <slug> [<status>, <size>]
-  <linear-or-empty> - next: <suggestion>
+  <ticket-or-empty> - next: <suggestion>
 ```
 
 Order tasks by:
