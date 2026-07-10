@@ -35,7 +35,7 @@ git clone <repo-url> ~/Develop/dot-files
 
 ### One source, every agent
 
-The workflow content is written **once** under `.ai/` and projected into each tool's native location by the `link-*.sh` scripts. Editing `.ai/` updates every agent at once (they read through symlinks); only the upstream Superpowers plugin and the Claude-only guard hook differ per tool.
+The workflow content is written **once** under `.ai/` and projected into each tool's native location by the `link-*.sh` scripts. Editing `.ai/` updates every agent at once (they read through symlinks); only the Claude-only guard hook differs per tool.
 
 ```mermaid
 flowchart LR
@@ -64,7 +64,7 @@ The skills drive a small lifecycle on top of per-task working memory at `.local/
 
 ```mermaid
 flowchart TD
-    new([new work / issue]) --> st["/start-task<br/>creates .local/active/&lt;slug&gt;/"]
+    new([new work / ticket]) --> st["/start-task<br/>creates .local/active/&lt;slug&gt;/"]
     st --> spec["spec.md + plan.md<br/>status: spec → plan"]
     spec --> impl["implement on a feature branch<br/>status: implementing"]
     impl --> pm["/pre-merge<br/>writes review.md"]
@@ -92,10 +92,6 @@ Claude uses the shared workflow rules from [`.ai/shared-instructions.md`](.ai/sh
 - **Conventional commits** and **scoped testing** (only runs tests for changed files)
 - Per-task working memory at `.local/active/<slug>/` (gitignored) — see "AI-Native Engineering Workflow" below
 
-**Plugins:**
-
-- [superpowers](https://github.com/obra/superpowers) — TDD, debugging, brainstorming, worktree workflows, code review, and more (installed from the official marketplace via `link-claude.sh`)
-
 **Shared repo workflow skills** live in [`.ai/skills/`](.ai/skills/) and are symlinked into Claude's native skills folder by `link-claude.sh`.
 
 **Skills:** Claude surfaces the shared workflow skills as slash commands — `/start-task`, `/status`, `/pre-merge`, `/archive-task`, `/code-review`. See the [shared skills table](#shared-source).
@@ -106,17 +102,11 @@ Codex uses the same shared workflow rules from [`.ai/shared-instructions.md`](.a
 
 **Shared repo workflow skills** live once in [`.ai/skills/`](.ai/skills/) and are symlinked into `~/.codex/skills/` by `link-codex.sh`. Codex loads the same five skills (see the [shared skills table](#shared-source)).
 
-**Plugin install:** `link-codex.sh` installs native Superpowers with `codex plugin add superpowers@openai-curated`.
-
-If `superpowers` is installed in Codex, these task files are the integration point: `spec.md` and `plan.md` remain the source of truth for this workflow.
-
 ### OpenCode
 
 OpenCode uses the same shared workflow rules from [`.ai/shared-instructions.md`](.ai/shared-instructions.md), symlinked into OpenCode's native `~/.config/opencode/AGENTS.md` location by `link-opencode.sh`.
 
 **Shared repo workflow skills** live once in [`.ai/skills/`](.ai/skills/) and are symlinked into `~/.config/opencode/skills/` by `link-opencode.sh`.
-
-**Plugin install:** `link-opencode.sh` clones [superpowers](https://github.com/obra/superpowers) into `~/.config/opencode/superpowers` and symlinks its plugin and skills into OpenCode.
 
 ### Shared Source
 
@@ -129,7 +119,7 @@ The five shared skills (slash commands in Claude — `/start-task` etc.; skills 
 
 | Skill          | What it does                                                                                                       |
 | -------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `start-task`   | On-ramp for new work. Creates `.local/active/<slug>/` with 4 templated files and a detected size.                  |
+| `start-task`   | On-ramp for new work. Creates `.local/active/<slug>/` with 4 templated files and a detected size; ingests a ticket link (any tracker) into the spec when given one. |
 | `status`       | Read-only view of every active task with status, size, and next-step suggestion.                                  |
 | `pre-merge`    | Production-safety gate: adversarial review + hardening checklist against spec, plan, system-map, and the diff.     |
 | `archive-task` | Lifecycle close-out. Moves `active/<slug>/` → `archive/<slug>/`, optionally graduates docs to the repo.           |
@@ -141,13 +131,7 @@ The link scripts project those shared files into each tool's native structure:
 - Codex -> `~/.codex/AGENTS.md` and `~/.codex/skills/`
 - OpenCode -> `~/.config/opencode/AGENTS.md` and `~/.config/opencode/skills/`
 
-> **Superpowers is installed from a different source per tool**, so versions can drift:
->
-> - Claude Code -> `superpowers@claude-plugins-official` (marketplace)
-> - Codex -> `superpowers@openai-curated` (marketplace)
-> - OpenCode -> cloned from [`obra/superpowers`](https://github.com/obra/superpowers) `main`
->
-> The shared rules and `.ai/skills/` are identical everywhere; only the upstream Superpowers plugin can differ.
+The shared rules and `.ai/skills/` are identical everywhere.
 
 ### Enforcement
 
@@ -157,13 +141,13 @@ The link scripts project those shared files into each tool's native structure:
 
 ### AI-Native Engineering Workflow
 
-These shared skills plus the shared instructions file form a small workflow layer on top of Superpowers. In Claude, the user-facing surface is three commands (`/start-task`, `/pre-merge`, `/archive-task`) plus `/status`; in Codex, the same workflows are available as skills.
+These shared skills plus the shared instructions file form a small, self-contained workflow layer on each tool's native primitives. In Claude, the user-facing surface is three commands (`/start-task`, `/pre-merge`, `/archive-task`) plus `/status`; in Codex, the same workflows are available as skills.
 
 **Per-task working memory** at `.local/active/<slug>/`:
 
-- `spec.md` — written by `superpowers:brainstorming`
-- `plan.md` — written by `superpowers:writing-plans`
-- `notes.md` — front-matter (slug, linear, size, status, last-updated) + running log
+- `spec.md` — the what and why (goal, scope, success criteria), agreed with the human before planning. When a ticket exists (Linear, GitHub Issues, or any tracker), the ticket owns the problem statement: the spec links to it, summarizes it once (with fetch date), and records only the delta — scope, success criteria, chosen approach.
+- `plan.md` — the how, drafted in the tool's native plan mode (Claude Plan Mode, Codex plan mode, OpenCode's plan agent) and saved here once approved
+- `notes.md` — front-matter (slug, ticket, size, status, last-updated) + running log
 - `review.md` — written by `/pre-merge`
 
 **Durable architectural intelligence** at `.local/system-map/` (prefixed filenames: `inv-`, `area-`, `danger-`, `pitfall-`). Grows as tasks archive.
@@ -171,7 +155,7 @@ These shared skills plus the shared instructions file form a small workflow laye
 **Typical flow:**
 
 1. `/start-task` (slug + auto-detected size) →
-2. describe intent — Claude picks brainstorming, writing-plans, TDD as appropriate →
+2. describe intent — design the spec together, then draft the plan in the tool's plan mode →
 3. `/pre-merge` when tests pass →
 4. submit + merge →
 5. `/archive-task` (auto-suggested when PR is merged).

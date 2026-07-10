@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script to unlink and remove OpenCode superpowers configuration.
+# Script to unlink and remove OpenCode configuration.
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
 
@@ -10,9 +10,9 @@ remove_symlink() {
 
     if [[ -L "$target" ]]; then
         local link_target=$(readlink "$target")
-        # Managed links point either into OpenCode's superpowers checkout or
-        # into this dot-files repo (shared rules and personal skills).
-        if [[ "$link_target" == *"$HOME/.config/opencode"* ]] || [[ "$link_target" == *"$DOTFILES_DIR"* ]]; then
+        # Managed links point into this dot-files repo (shared rules and
+        # personal skills).
+        if [[ "$link_target" == *"$DOTFILES_DIR"* ]]; then
             echo "  🗑️  Removing: $target -> $link_target"
             rm "$target"
         else
@@ -25,10 +25,7 @@ remove_symlink() {
     fi
 }
 
-echo "🗑️  Removing OpenCode superpowers..."
-
-remove_symlink "$HOME/.config/opencode/plugins/superpowers.js" "Superpowers plugin"
-remove_symlink "$HOME/.config/opencode/skills/superpowers" "Superpowers skills"
+echo "🗑️  Removing OpenCode configuration..."
 
 agents_link="$HOME/.config/opencode/AGENTS.md"
 if [[ -L "$agents_link" ]] && [[ "$(readlink "$agents_link")" == *"/.ai/shared-instructions.md" ]]; then
@@ -49,12 +46,5 @@ for skill in "$DOTFILES_DIR/.ai/skills"/*; do
     fi
 done
 
-if [[ -d "$HOME/.config/opencode/superpowers" ]]; then
-    echo "  🗑️  Removing superpowers repository..."
-    rm -rf "$HOME/.config/opencode/superpowers"
-else
-    echo "  ✅ Already clean: superpowers repository"
-fi
-
 echo ""
-echo "🎉 OpenCode superpowers removed!"
+echo "🎉 OpenCode configuration removed!"

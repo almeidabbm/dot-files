@@ -2,8 +2,8 @@
 
 # Read-only health check for dot-files.
 # Verifies that every symlink this repo is supposed to create exists and
-# resolves, that the shared AI rules + skills are projected into each tool,
-# and that Superpowers is present for OpenCode. Makes NO changes.
+# resolves, and that the shared AI rules + skills are projected into each
+# tool. Makes NO changes.
 # Exits non-zero if any check fails, so it is safe to use in scripts/CI.
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
@@ -73,12 +73,6 @@ for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
     check_link "$HOME/.codex/skills/$name" "/dot-files/.ai/skills/$name" "Codex    skill: $name"
     check_link "$HOME/.config/opencode/skills/$name" "/dot-files/.ai/skills/$name" "OpenCode skill: $name"
 done
-
-echo ""
-echo "📦 Superpowers (OpenCode)"
-check_path "$HOME/.config/opencode/superpowers" "Superpowers repo cloned"
-check_link "$HOME/.config/opencode/plugins/superpowers.js" "/.config/opencode/superpowers" "Superpowers plugin"
-check_link "$HOME/.config/opencode/skills/superpowers" "/.config/opencode/superpowers" "Superpowers skills"
 
 echo ""
 echo "────────────────────────────────────────"

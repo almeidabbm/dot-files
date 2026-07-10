@@ -49,13 +49,15 @@
 
 - Before committing, run tests related to the changed files only.
 - If the related test surface is unclear, stop and ask rather than running the whole suite by default.
+- When fixing a bug, write a failing test that reproduces it before writing the fix, and keep it as the regression test.
+- New behavior ships with tests in the same branch as the change.
 
 ## Active Task Convention
 
 Per-task working memory lives at `$(git rev-parse --show-toplevel)/.local/active/<slug>/`. Each task has four files:
 
-- `spec.md` - the design for the current task
-- `plan.md` - the implementation plan or PR decomposition
+- `spec.md` - the what and why: goal, scope (in / out), success criteria, and open questions. Agreed with the human before any planning or implementation.
+- `plan.md` - the how: the implementation steps or PR decomposition derived from the approved spec.
 - `notes.md` - running log plus status frontmatter
 - `review.md` - pre-merge findings and hardening notes
 
@@ -64,7 +66,7 @@ Per-task working memory lives at `$(git rev-parse --show-toplevel)/.local/active
 ```markdown
 ---
 slug: YYYY-MM-DD-<kebab>
-linear: <issue-id-or-empty>
+ticket: <link-or-id-or-empty>
 size: quick | standard | big
 status: spec | plan | implementing | review | ready-to-ship | merged | archived
 last-updated: <ISO timestamp>
@@ -86,9 +88,16 @@ last-updated: <ISO timestamp>
 ## Spec And Plan Files
 
 - Specs and plans for the current task live in `.local/active/<current-slug>/spec.md` and `plan.md`, where the current slug is the most recently modified folder under `.local/active/`.
-- These paths override the default output locations of planning-oriented Superpowers workflows. Do not save task specs or plans to `docs/`, `docs/plans/`, `../<repo>_plans/`, or any other external or repo-tracked location while the task is active.
+- These paths override the default output locations of any planning workflow or plan mode. Do not save task specs or plans to `docs/`, `docs/plans/`, `../<repo>_plans/`, or any other external or repo-tracked location while the task is active.
 - If `.local/active/` is empty, start the task first before writing a spec or plan.
-- If `superpowers` is installed, it can help draft specs or plans, but these task-local files remain the source of truth.
+- Draft plans with the tool's native plan mode (Claude Code Plan Mode, Codex plan mode, OpenCode's plan agent). When the human approves a plan, save it to the current task's `plan.md` before implementing.
+
+## Tickets And Specs
+
+- A ticket link or ID in the `ticket:` frontmatter can point at any tracker (Linear, GitHub Issues, or other). Never hardcode workflow behavior to one tracker.
+- The ticket owns the problem statement; `spec.md` owns the agreed solution. Link to the ticket rather than copying it.
+- When a task starts from a ticket, fetch it once into `spec.md`'s Goal section — a short summary plus a source line (`Fetched from <link> on <date>`) — using whatever access the session has (MCP tool, `gh issue view`, or ask the user to paste it). Then record only the delta the ticket lacks: scope in/out, success criteria, chosen approach.
+- If the ticket changes mid-task, the local spec wins until a human re-syncs it deliberately.
 
 ## Per-Repo Gitignore
 

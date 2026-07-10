@@ -21,34 +21,14 @@ create_symlink() {
 
 echo "⚡ Setting up OpenCode configuration..."
 
-if [ -d "$HOME/.config/opencode/superpowers" ]; then
-    echo "  ℹ️  Updating existing superpowers..."
-    cd "$HOME/.config/opencode/superpowers" && git pull
-else
-    echo "  📥 Cloning superpowers..."
-    git clone https://github.com/obra/superpowers.git "$HOME/.config/opencode/superpowers"
-fi
-
 echo ""
 echo "🔗 Creating symlinks..."
 
-mkdir -p "$HOME/.config/opencode/plugins"
 mkdir -p "$HOME/.config/opencode/skills"
 
 create_symlink "$DOTFILES_DIR/.ai/shared-instructions.md" \
                "$HOME/.config/opencode/AGENTS.md" \
                "OpenCode global rules"
-
-rm -f "$HOME/.config/opencode/plugins/superpowers.js"
-rm -rf "$HOME/.config/opencode/skills/superpowers"
-
-create_symlink "$HOME/.config/opencode/superpowers/.opencode/plugins/superpowers.js" \
-               "$HOME/.config/opencode/plugins/superpowers.js" \
-               "Superpowers plugin"
-
-create_symlink "$HOME/.config/opencode/superpowers/skills" \
-               "$HOME/.config/opencode/skills/superpowers" \
-               "Superpowers skills"
 
 for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
     [[ -d "$skill_dir" ]] || continue
@@ -57,6 +37,6 @@ for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
 done
 
 echo ""
-echo "  ℹ️  Restart OpenCode to load the plugin and skills"
+echo "  ℹ️  Restart OpenCode to load the skills"
 echo ""
 echo "🎉 OpenCode setup complete!"
