@@ -21,7 +21,7 @@ Suggested next steps by status:
 - `plan` -> turn `plan.md` into concrete implementation steps
 - `implementing` -> continue coding, then run related tests and `pre-merge`
 - `review` -> fix blocking items from `review.md`, then rerun `pre-merge`
-- `ready-to-ship` -> submit the PR or push with permission
+- `ready-to-ship` -> submit the PR (`gh stack submit --open` inside a stack) or push with permission
 - `merged` -> archive the task
 
 If status is `review`, scan `review.md` and include the number of blocking items inline.
