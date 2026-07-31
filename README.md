@@ -86,7 +86,7 @@ Claude uses the shared workflow rules from [`.ai/shared-instructions.md`](.ai/sh
 
 **Shared rules** enforce:
 
-- Branch management with **Graphite CLI** (`gt`) — with plain-`git` fallbacks for machines that lack it
+- Branch management with **GitHub native stacked PRs** (`gh stack`) — with plain-`git` fallbacks where stacking isn't available
 - **Git worktrees** inside the repo (`.worktrees/`, gitignored) for parallel work
 - Auto-decomposition of features into **stacked PRs**
 - **Conventional commits** and **scoped testing** (only runs tests for changed files)
@@ -214,6 +214,6 @@ Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/rom
 | [powerlevel10k](https://github.com/romkatv/powerlevel10k)     | Shell theme             |
 | [asdf](https://asdf-vm.com/)                                  | Version management      |
 | [fzf](https://github.com/junegunn/fzf)                        | Fuzzy finding           |
-| [Graphite CLI](https://graphite.dev/docs/graphite-cli)        | Shared workflow rules   |
+| [GitHub CLI](https://cli.github.com/) + `gh stack`             | Shared workflow rules   |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Claude integration      |
 | [Codex](https://developers.openai.com/codex/)                 | Codex integration       |

@@ -3,21 +3,43 @@
 ## Git & Branching
 
 - Never commit directly to `main` or trunk. Before making any commits, check the current branch with `git branch --show-current`. If you are on `main`, create a branch first.
-- Prefer Graphite CLI (`gt`) for branch management when available; fall back to plain `git` when it is not.
-- Use `gt create -m "branch-name"` for stacked branches when `gt` is available. Use `git checkout -b branch-name` for independent work or as the fallback.
-- Never push or force-push to `main` or trunk directly. Pushing feature/stacked branches and submitting PRs (`git push`, `gt submit`) is fine and does not require asking first.
-- Always sync trunk before starting new work: `gt sync` if available, otherwise `git fetch origin && git checkout main && git pull --rebase`.
+- Use GitHub's native stacked pull requests (`gh stack`) for branch management whenever the repo supports it; fall back to plain `git` plus `gh pr` when it does not.
+- Use `gh stack init <branch-name>` to start a stack and `gh stack add -m "message" <branch-name>` for each layer on top. Use `git checkout -b branch-name` for standalone work or as the fallback.
+- Never push or force-push to `main` or trunk directly. Pushing feature/stacked branches and submitting PRs (`git push`, `gh stack submit`) is fine and does not require asking first.
+- Always sync trunk before starting new work: `gh stack sync` when inside a stack, otherwise `git fetch origin && git checkout main && git pull --rebase`.
 
-## Graphite Availability
+## Stacked Pull Requests
 
-- Before running any `gt` command, check `command -v gt` and fall back to plain `git` if missing.
-- Fallbacks:
-  - `gt sync` -> `git fetch origin && git checkout main && git pull --rebase`
-  - `gt create -m "branch-name"` -> `git checkout -b branch-name`
-  - `gt log` -> `git log --oneline --graph --decorate --all -20`
-  - `gt modify` -> `git commit --amend`
-  - `gt restack` -> manual rebases per child branch
-- If `gt` is missing, mention that stacked PR tooling will not auto-restack downstream branches.
+Stacking is native to GitHub via the `gh stack` extension (public preview). Install it once with
+`gh extension install github/gh-stack`.
+
+- Before using `gh stack`, check that the extension is installed: `gh extension list | grep -q gh-stack`.
+- Stacking is enabled per repository. If a `gh stack` command exits with code `9`, stacked pull
+  requests are not enabled for that repo — say so and use the plain-`git` fallback instead.
+- Core commands:
+  - `gh stack init <branch>` - start a stack off trunk. Also adopts existing branches: `gh stack init <branch-a> <branch-b>`.
+  - `gh stack add -m "message" <branch>` - commit current work and add the next layer. Must be run from the topmost branch of the stack.
+  - `gh stack view` - show the stack, its ordering, and PR links (`-s` for short, `--json` for machine-readable).
+  - `gh stack submit --open` - push every branch and create or update the PRs.
+  - `gh stack sync` - fetch, cascade-rebase, push, and reconcile PR state (`--prune` also deletes local branches for merged PRs).
+  - `gh stack rebase` - cascade-rebase after trunk moves (`--upstack` / `--downstack` to limit scope).
+  - `gh stack merge <pr>` - merge every PR up to and including that one, all or nothing.
+  - `gh stack up` / `down` / `top` / `bottom` / `trunk` / `checkout` - navigate the stack.
+  - `gh stack link <branch-or-pr> <branch-or-pr> ...` - stack already-pushed branches on GitHub, bottom to top, without local tracking.
+- Gotchas worth remembering:
+  - `gh stack submit` creates **draft** PRs by default. Pass `--open` to mark them ready for review.
+  - `gh stack modify` is the interactive **restructure** UI (drop, fold, reorder, rename) — it is not an amend.
+    To amend the current branch, run `git commit --amend` and then `gh stack rebase --upstack`.
+  - `gh stack modify` requires a clean working tree, a linear history, and no rebase in progress.
+  - `gh stack init` turns on `git rerere`, so a conflict resolved once is replayed on later branches in the stack.
+- Fallbacks when stacking is unavailable:
+  - branch creation -> `git checkout -b branch-name`
+  - stack view -> `git log --oneline --graph --decorate --all -20`
+  - submit -> `gh pr create --base <parent-branch>` per branch, in stack order
+  - sync / rebase -> `git fetch origin` plus a manual rebase per child branch
+  - amend -> `git commit --amend`, then rebase each downstream branch by hand
+- When falling back, say explicitly that downstream branches will not be rebased automatically and
+  that the PRs will not be linked as a stack on GitHub.
 
 ## Worktrees
 
@@ -35,8 +57,8 @@
 - Each branch in the stack must be independently understandable and must not break the codebase.
 - Present the proposed stack decomposition before starting a big implementation so the user can adjust scope.
 - Before creating each stacked branch, commit the current work and run the related tests.
-- When amending a branch mid-stack, use `gt modify` if available; otherwise use `git commit --amend` and manually rebase downstream branches.
-- If a restack or rebase hits conflicts, stop and show the conflicts instead of guessing through them.
+- When amending a branch mid-stack, run `git commit --amend` and then `gh stack rebase --upstack` so the layers above pick the change up.
+- If a rebase hits conflicts, stop and show the conflicts instead of guessing through them.
 
 ## Commits
 
