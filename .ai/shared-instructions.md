@@ -16,16 +16,7 @@ Stacking is native to GitHub via the `gh stack` extension (public preview). Inst
 - Before using `gh stack`, check that the extension is installed: `gh extension list | grep -q gh-stack`.
 - Stacking is enabled per repository. If a `gh stack` command exits with code `9`, stacked pull
   requests are not enabled for that repo — say so and use the plain-`git` fallback instead.
-- Core commands:
-  - `gh stack init <branch>` - start a stack off trunk. Also adopts existing branches: `gh stack init <branch-a> <branch-b>`.
-  - `gh stack add -m "message" <branch>` - commit current work and add the next layer. Must be run from the topmost branch of the stack.
-  - `gh stack view` - show the stack, its ordering, and PR links (`-s` for short, `--json` for machine-readable).
-  - `gh stack submit --open` - push every branch and create or update the PRs.
-  - `gh stack sync` - fetch, cascade-rebase, push, and reconcile PR state (`--prune` also deletes local branches for merged PRs).
-  - `gh stack rebase` - cascade-rebase after trunk moves (`--upstack` / `--downstack` to limit scope).
-  - `gh stack merge <pr>` - merge every PR up to and including that one, all or nothing.
-  - `gh stack up` / `down` / `top` / `bottom` / `trunk` / `checkout` - navigate the stack.
-  - `gh stack link <branch-or-pr> <branch-or-pr> ...` - stack already-pushed branches on GitHub, bottom to top, without local tracking.
+- Run `gh stack --help` (or `gh stack <command> --help`) for the command set rather than guessing at it.
 - Gotchas worth remembering:
   - `gh stack submit` creates **draft** PRs by default. Pass `--open` to mark them ready for review.
   - `gh stack modify` is the interactive **restructure** UI (drop, fold, reorder, rename) — it is not an amend.
