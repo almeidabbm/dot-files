@@ -43,6 +43,19 @@ check_path() {
     fi
 }
 
+check_command() {
+    local command_path="$1"
+    local desc="$2"
+
+    if [[ -x "$command_path" ]] && "$command_path" root >/dev/null 2>&1; then
+        echo "  ✅ $desc"
+        ((pass++))
+    else
+        echo "  ❌ $desc — command failed ($command_path)"
+        ((fail++))
+    fi
+}
+
 echo "🩺 dot-files doctor — read-only health check"
 echo ""
 
@@ -60,6 +73,8 @@ fi
 
 echo ""
 echo "📜 Shared AI rules (one source -> three tools)"
+check_link "$HOME/.local/bin/agent-memory" "/dot-files/.ai/bin/agent-memory" "Agent memory CLI"
+check_command "$HOME/.local/bin/agent-memory" "Agent memory root resolution"
 check_link "$HOME/.claude/CLAUDE.md" "$SHARED" "Claude   global rules"
 check_link "$HOME/.codex/AGENTS.md" "$SHARED" "Codex    global rules"
 check_link "$HOME/.config/opencode/AGENTS.md" "$SHARED" "OpenCode global rules"

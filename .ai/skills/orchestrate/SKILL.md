@@ -48,8 +48,9 @@ has them, otherwise its own lifecycle (spec -> plan -> implement -> review -> PR
    - GitHub: `gh issue list --milestone/--label`, `gh api` for Projects (v2).
 2. **Cross-check reality vs tracker** for anything marked in progress:
    - Open PRs: `gh pr list`, `gh pr checks`, review state.
-   - Local state: `git branch -a`, `.worktrees/`, and
-     `.local/active/*/notes.md` frontmatter (the workflow source of truth).
+   - Local state: `git branch -a`, `.worktrees/`, and every path returned by
+     `agent-memory list --state active` (`notes.md` remains the lifecycle source
+     of truth; `task.json` owns stable identity and repository bindings).
    - Flag drift both ways: "In Progress" with no commits or PR; "Todo" with an
      open PR; a `ready-to-ship` task whose ticket still says started.
 3. **Classify every item** into one of:
@@ -65,8 +66,8 @@ has them, otherwise its own lifecycle (spec -> plan -> implement -> review -> PR
 5. **On approval, dispatch sub-agents** — background, in parallel when
    independent:
    - Research / membership scans -> read-only general-purpose agents.
-   - Planning -> a planning agent; save spec/plan through the `start-task`
-     convention (`.local/active/<slug>/spec.md`, `plan.md`).
+   - Planning -> a planning agent; save spec/plan through `start-task` in the
+     central task directory returned by `agent-memory`.
    - Implementation -> own worktree per task, following `start-task` ->
      implement -> `pre-merge`. Push/PR only if the human has authorized it.
    - Spec or options drafts -> files for human review; never posted to the

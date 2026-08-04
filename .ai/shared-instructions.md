@@ -36,8 +36,8 @@ Stacking is native to GitHub via the `gh stack` extension (public preview). Inst
 
 - Worktrees live inside the repo at `$(git rev-parse --show-toplevel)/.worktrees/<feature>/` and must stay gitignored.
 - Create them from trunk: `git worktree add .worktrees/<feature> trunk`.
-- After creating a worktree, symlink `.local` so it shares project intel with the main repo:
-  - `ln -s ../.local .worktrees/<feature>/.local`
+- Task memory is global; never copy or symlink a repository `.local` into a worktree.
+- Bind the worktree to its task after creation: `agent-memory bind <task-id-or-slug> --repo .worktrees/<feature>`.
 - Copy `.env*` and `.envrc` from the main repo into the worktree, ignoring missing files.
 - Run `docker compose` from inside the worktree directory when compose files use relative paths.
 - Remind the user to clean up finished worktrees with `git worktree remove .worktrees/<feature>`.
@@ -67,8 +67,16 @@ Stacking is native to GitHub via the `gh stack` extension (public preview). Inst
 
 ## Active Task Convention
 
-Per-task working memory lives at `$(git rev-parse --show-toplevel)/.local/active/<slug>/`. Each task has four files:
+Workflow memory is task-centric and independent of repository checkouts. Resolve
+its root with `agent-memory root`; `AGENT_LOCAL_MEMORY_PATH` overrides the safe
+default under the user's local data directory. Never guess or hard-code the
+resolved path.
 
+Active tasks live under `<memory-root>/tasks/active/`; archived tasks live under
+`<memory-root>/tasks/archive/`. A task can reference multiple repositories and
+has five files:
+
+- `task.json` - machine-readable stable identity and repository bindings
 - `spec.md` - the what and why: goal, scope (in / out), success criteria, and open questions. Agreed with the human before any planning or implementation.
 - `plan.md` - the how: the implementation steps or PR decomposition derived from the approved spec.
 - `notes.md` - running log plus status frontmatter
@@ -78,17 +86,27 @@ Per-task working memory lives at `$(git rev-parse --show-toplevel)/.local/active
 
 ```markdown
 ---
+id: task_<stable-id>
 slug: YYYY-MM-DD-<kebab>
 ticket: <link-or-id-or-empty>
+repositories: [{"id":"host/org/repo","role":"primary"}]
 size: quick | standard | big
 status: spec | plan | implementing | review | ready-to-ship | merged | archived
 last-updated: <ISO timestamp>
 ---
 ```
 
-- Current task = the most recently modified folder under `.local/active/`.
-- On archive, move `active/<slug>/` to `archive/<slug>/`.
-- Durable architectural intelligence lives in `.local/system-map/` with prefixes `inv-`, `area-`, `danger-`, and `pitfall-`.
+- Never select a current task by directory modification time. Resolve it with
+  `agent-memory current --repo <checkout>`, which uses explicit session identity,
+  checkout/branch bindings, then an unambiguous repository match.
+- Attach another repository with `agent-memory add-repo <task> --repo <checkout> --role <role>`.
+- Archive through `agent-memory archive <task>` after completing the archive workflow.
+- Durable architectural intelligence is repository-scoped. Resolve its directory
+  with `agent-memory system-map --repo <checkout>` and use the existing `inv-`,
+  `area-`, `danger-`, and `pitfall-` prefixes.
+- Machine-specific checkout paths, migration reports, task contents, and private
+  tracker references stay in the local memory root. Do not publish them to issues,
+  commits, CI logs, or PR descriptions.
 
 ## Workflow Guidance
 
@@ -100,9 +118,10 @@ last-updated: <ISO timestamp>
 
 ## Spec And Plan Files
 
-- Specs and plans for the current task live in `.local/active/<current-slug>/spec.md` and `plan.md`, where the current slug is the most recently modified folder under `.local/active/`.
+- Resolve the current task directory with `agent-memory current --repo <checkout>`;
+  its spec and plan are `spec.md` and `plan.md` inside that directory.
 - These paths override the default output locations of any planning workflow or plan mode. Do not save task specs or plans to `docs/`, `docs/plans/`, `../<repo>_plans/`, or any other external or repo-tracked location while the task is active.
-- If `.local/active/` is empty, start the task first before writing a spec or plan.
+- If no current task resolves, start or explicitly bind the task before writing a spec or plan.
 - Draft plans with the tool's native plan mode (Claude Code Plan Mode, Codex plan mode, OpenCode's plan agent). When the human approves a plan, save it to the current task's `plan.md` before implementing.
 
 ## Tickets And Specs
@@ -114,7 +133,8 @@ last-updated: <ISO timestamp>
 
 ## Per-Repo Gitignore
 
-Every repo using this workflow should gitignore the working-memory and worktree folders:
+Every repo using this workflow should continue to gitignore legacy local memory
+and worktrees while migration sources are retained:
 
 ```gitignore
 .local/

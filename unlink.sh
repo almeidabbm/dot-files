@@ -49,6 +49,7 @@ echo "🔌 MCP configurations:"
 
 echo ""
 echo "🔧 Tool configurations:"
+"$(cd "$(dirname "$0")" && pwd)/unlink-agent-memory.sh"
 remove_symlink "$HOME/.default-npm-packages" "NPM packages"
 remove_symlink "$HOME/.fzf.zsh" "FZF config (Linux)"
 remove_symlink "$HOME/.fzf.mac.zsh" "FZF config (macOS)"

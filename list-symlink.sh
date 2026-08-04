@@ -12,6 +12,7 @@ targets=(
     "$HOME/.default-npm-packages|Default NPM packages"
     "$HOME/.fzf.zsh|FZF config (Linux)"
     "$HOME/.fzf.mac.zsh|FZF config (macOS)"
+    "$HOME/.local/bin/agent-memory|Agent memory CLI"
 )
 
 if [[ -f "$DOTFILES_DIR/.ai/shared-instructions.md" ]]; then

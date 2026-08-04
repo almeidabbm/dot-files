@@ -1,145 +1,102 @@
 ---
 name: start-task
-description: Use when starting new work such as a feature, bugfix, refactor, investigation, or planning task; when the user mentions a ticket link or issue ID; or when they say they want to begin working on something. Creates .local/active/<slug>/ with templated task files and a detected size.
+description: Use when starting new work such as a feature, bugfix, refactor, investigation, or planning task; when the user mentions a ticket link or issue ID; or when they say they want to begin working on something. Creates a task in central agent memory with templated files and a detected size.
 ---
 
 # Start Task
 
-Create the per-task working-memory folder under `.local/active/<slug>/` with four files: `spec.md`, `plan.md`, `notes.md`, and `review.md`.
+Create a task through `agent-memory`. The CLI owns stable identity, central
+storage, repository bindings, and templates; do not hand-create a
+repository-local `.local` folder.
 
-This skill only sets up the task folder. Do not automatically start design or implementation work unless the user asks for it next.
+This skill only sets up the task. Do not automatically design or implement it
+unless the user also asks for that work.
 
-> The shared workflow rules (your global agent rules) are the source of truth for the `.local/active/` layout and the `notes.md` frontmatter schema. The templates below implement that convention; if the two ever disagree, follow the shared rules.
+## 1. Check the runtime
 
-## 1. Determine the slug
+1. Resolve the repository root with `git rev-parse --show-toplevel`.
+2. Require `agent-memory` on `PATH`. If it is missing, tell the user to run the
+   relevant dot-files link script; do not silently fall back to a new `.local`.
+3. Resolve the memory root with `agent-memory root --repo <repo-root>`.
 
-Use `YYYY-MM-DD-<kebab-feature-name>`. Planning-only tasks use `YYYY-MM-DD-plan-<project-name>`.
+## 2. Determine and confirm the slug
+
+Use `YYYY-MM-DD-<kebab-feature-name>`. Planning-only tasks use
+`YYYY-MM-DD-plan-<project-name>`.
 
 Resolution order:
 
 1. If the user gives a task name, turn it into a slug.
 2. If a ticket title is available, propose a slug based on it.
-3. If the task is still unclear, ask one concise question before creating anything.
+3. If the task is still unclear, ask one concise question before creating it.
 
-Always confirm the slug before creating the folder.
+Always confirm the slug before creating the task.
 
-## 1b. Ingest the ticket, if one was provided
+## 3. Ingest a ticket once
 
-If the user gave a ticket link or ID (any tracker — Linear, GitHub Issues, or other):
+If the user gave a ticket link or ID from any tracker:
 
-1. Fetch it once, using whatever access this session has: an MCP tool, `gh issue view`, or ask the user to paste the content.
-2. Summarize the problem statement into `spec.md`'s Goal section, with a source line: `Fetched from <link> on <date>`.
-3. Do not copy the full ticket. The ticket owns the problem statement; `spec.md` records the link plus the delta it lacks — scope (in / out), success criteria, chosen approach. List missing pieces under Open questions.
-4. For `quick` tasks, the ticket link plus a one-line goal is enough.
+1. Fetch it using the available tracker access.
+2. After task creation, summarize the problem into `spec.md`'s Goal with
+   `Fetched from <link> on <date>`.
+3. Do not copy the ticket. The ticket owns the problem; the spec owns the
+   agreed solution and records scope, success criteria, chosen approach, and
+   missing decisions.
+4. For a quick task, a link and one-line goal are enough.
 
-If the ticket cannot be fetched, record the link anyway and continue; the spec design step fills the gaps with the user.
+If the ticket cannot be fetched, retain the reference and continue.
 
-## 2. Detect task size
+## 4. Detect task size
 
-Default to `standard`, then adjust based on signals.
+Default to `standard`.
 
-Use `quick` when any of these are true:
+Use `quick` for tiny copy, lint, rename, revert, or hotfix work. Use `big` for a
+migration, architecture change, redesign, rewrite, scaffold, spike, planning
+project, or work touching warnings found under the path returned by
+`agent-memory system-map --repo <repo-root>`.
 
-- The task sounds like a typo, rename, copy tweak, lint fix, revert, or tiny hotfix.
-- The request is extremely short or obviously narrow.
+Always tell the user when `quick` or `big` is selected and why.
 
-Use `big` when any of these are true:
+## 5. Verify repository hygiene
 
-- The task is a migration, refactor, redesign, rewrite, architecture change, scaffold, or spike.
-- The slug starts with `plan-`.
-- The task is likely to touch areas already called out in `.local/system-map/danger-*.md`.
+Check `.gitignore` for `.worktrees/` and the legacy `.local/` exclusion. Offer
+to add missing entries. The latter protects retained migration sources; new
+tasks do not live there.
 
-Always show the user the detected size and the signals that led to it. Do not silently choose `quick` or `big`.
+## 6. Create and bind the task
 
-## 3. Verify gitignore
+Run:
 
-Resolve the repo root with `git rev-parse --show-toplevel`. Check `.gitignore` for:
-
-```gitignore
-.local/
-.worktrees/
+```text
+agent-memory create --slug <slug> --title <title> --ticket <ticket-or-empty> --size <size> --repo <repo-root> --role primary
 ```
 
-If either entry is missing, offer to add it before continuing.
+The printed directory contains `task.json`, `spec.md`, `plan.md`, `notes.md`,
+and `review.md`. Use that exact path for subsequent edits.
 
-## 4. Create the folder and templates
+If the task already spans other repositories, attach each explicitly:
 
-Create:
-
-- `.local/active/<slug>/spec.md`
-- `.local/active/<slug>/plan.md`
-- `.local/active/<slug>/notes.md`
-- `.local/active/<slug>/review.md`
-
-Use these contents.
-
-### `spec.md`
-
-```markdown
-# <Task title>
-
-**Status:** spec
-**Created:** YYYY-MM-DD
-**Ticket:** <link-or-empty>
-
-## Goal
-_To be defined during design._
-
-## Scope (in / out)
-
-## Success criteria
-
-## Open questions
+```text
+agent-memory add-repo <task-id-or-slug> --repo <checkout> --role <role>
 ```
 
-### `plan.md`
+Never infer that two tasks are identical merely because they share a ticket.
 
-```markdown
-# plan.md
+## 7. Confirm and suggest next steps
 
-_To be populated once the spec is clear and approved._
-```
+Show the task path, stable task ID, repositories, detected size, current
+status, and likely next move. Mention other active tasks only when helpful;
+never choose a current task by modification time.
 
-### `notes.md`
+Suggested moves:
 
-```markdown
----
-slug: <slug>
-ticket: <link-or-id-or-empty>
-size: <detected-size>
-status: spec
-last-updated: <ISO timestamp>
----
-
-## Open questions
-
-## Log
-
-- <ISO timestamp> - created via start-task
-```
-
-### `review.md`
-
-```markdown
-_Populated by pre-merge. Do not edit by hand._
-```
-
-## 5. Confirm and suggest next steps
-
-Show:
-
-- the folder that was created
-- the detected size
-- the current status
-- the next likely move
-
-Suggested next moves:
-
-- design the spec in `spec.md` - interview the user about goal, scope (in / out), and success criteria before proposing a design
-- write the implementation plan in `plan.md` - use the tool's native plan mode to explore, then save the approved plan there
+- design the approved solution in `spec.md`
+- draft the implementation plan in the tool's native plan mode, then save the
+  human-approved plan to `plan.md`
 
 ## Edge cases
 
-- If the slug already exists, ask whether to resume it or pick a different slug.
-- If there are already multiple active tasks, that is fine; mention the most recent one so the user sees existing context.
-- If the repo has no `.gitignore`, create it if the user approves.
+- If the slug exists, ask whether to resume it or choose another.
+- If a repository has several active tasks, bind the intended one explicitly.
+- Keep machine paths, private ticket references, task contents, and migration
+  reports in central memory; do not post them publicly.
