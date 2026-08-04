@@ -21,6 +21,8 @@ create_symlink() {
 
 echo "⚡ Setting up OpenCode configuration..."
 
+"$DOTFILES_DIR/link-agent-memory.sh"
+
 echo ""
 echo "🔗 Creating symlinks..."
 

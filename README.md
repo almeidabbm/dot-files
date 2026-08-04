@@ -60,11 +60,11 @@ flowchart LR
 
 ### The task workflow
 
-The skills drive a small lifecycle on top of per-task working memory at `.local/active/<slug>/` (gitignored). The `notes.md` frontmatter `status` is the source of truth for where a task is; the trunk guard makes the "never touch `main`" rule deterministic.
+The skills drive a small lifecycle on top of centralized task memory at `$AGENT_LOCAL_MEMORY_PATH`. Tasks are source-agnostic, can bind to more than one repository, and use `notes.md` frontmatter as the lifecycle source of truth. The trunk guard makes the "never touch `main`" rule deterministic.
 
 ```mermaid
 flowchart TD
-    new([new work / ticket]) --> st["/start-task<br/>creates .local/active/&lt;slug&gt;/"]
+    new([new work / ticket]) --> st["/start-task<br/>creates a central task"]
     st --> spec["spec.md + plan.md<br/>status: spec → plan"]
     spec --> impl["implement on a feature branch<br/>status: implementing"]
     impl --> pm["/pre-merge<br/>writes review.md"]
@@ -90,7 +90,7 @@ Claude uses the shared workflow rules from [`.ai/shared-instructions.md`](.ai/sh
 - **Git worktrees** inside the repo (`.worktrees/`, gitignored) for parallel work
 - Auto-decomposition of features into **stacked PRs**
 - **Conventional commits** and **scoped testing** (only runs tests for changed files)
-- Per-task working memory at `.local/active/<slug>/` (gitignored) — see "AI-Native Engineering Workflow" below
+- Central, multi-repository task memory at `$AGENT_LOCAL_MEMORY_PATH` — see "AI-Native Engineering Workflow" below
 
 **Shared repo workflow skills** live in [`.ai/skills/`](.ai/skills/) and are symlinked into Claude's native skills folder by `link-claude.sh`.
 
@@ -100,7 +100,7 @@ Claude uses the shared workflow rules from [`.ai/shared-instructions.md`](.ai/sh
 
 Codex uses the same shared workflow rules from [`.ai/shared-instructions.md`](.ai/shared-instructions.md), symlinked into Codex's native `~/.codex/AGENTS.md` location by `link-codex.sh`.
 
-**Shared repo workflow skills** live once in [`.ai/skills/`](.ai/skills/) and are symlinked into `~/.codex/skills/` by `link-codex.sh`. Codex loads the same five skills (see the [shared skills table](#shared-source)).
+**Shared repo workflow skills** live once in [`.ai/skills/`](.ai/skills/) and are symlinked into `~/.codex/skills/` by `link-codex.sh`. Codex loads the same workflows (see the [shared skills table](#shared-source)).
 
 ### OpenCode
 
@@ -115,15 +115,16 @@ The reusable workflow content is agent-agnostic and lives in:
 - [`.ai/shared-instructions.md`](.ai/shared-instructions.md) for durable global workflow rules
 - [`.ai/skills/`](.ai/skills/) for reusable task workflows
 
-The five shared skills (slash commands in Claude — `/start-task` etc.; skills of the same name in Codex and OpenCode):
+The shared skills (slash commands in Claude — `/start-task` etc.; skills of the same name in Codex and OpenCode):
 
 | Skill          | What it does                                                                                                       |
 | -------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `start-task`   | On-ramp for new work. Creates `.local/active/<slug>/` with 4 templated files and a detected size; ingests a ticket link (any tracker) into the spec when given one. |
+| `start-task`   | On-ramp for new work. Creates a central task with metadata and five working files, binds repositories, and ingests a ticket link from any tracker. |
 | `status`       | Read-only view of every active task with status, size, and next-step suggestion.                                  |
 | `pre-merge`    | Production-safety gate: adversarial review + hardening checklist against spec, plan, system-map, and the diff.     |
 | `archive-task` | Lifecycle close-out. Moves `active/<slug>/` → `archive/<slug>/`, optionally graduates docs to the repo.           |
 | `code-review`  | Reviews a diff, branch, or PR for correctness, security, types, architecture, and tests.                          |
+| `orchestrate`  | Coordinates a ticket, epic, or milestone across tracker state, tasks, repositories, branches, and pull requests. |
 
 The link scripts project those shared files into each tool's native structure:
 
@@ -143,14 +144,15 @@ The shared rules and `.ai/skills/` are identical everywhere.
 
 These shared skills plus the shared instructions file form a small, self-contained workflow layer on each tool's native primitives. In Claude, the user-facing surface is three commands (`/start-task`, `/pre-merge`, `/archive-task`) plus `/status`; in Codex, the same workflows are available as skills.
 
-**Per-task working memory** at `.local/active/<slug>/`:
+**Per-task working memory** under `$AGENT_LOCAL_MEMORY_PATH/tasks/active/<task-id>/`:
 
+- `task.json` — stable task identity, tracker reference, and one or more repository bindings with optional roles
 - `spec.md` — the what and why (goal, scope, success criteria), agreed with the human before planning. When a ticket exists (Linear, GitHub Issues, or any tracker), the ticket owns the problem statement: the spec links to it, summarizes it once (with fetch date), and records only the delta — scope, success criteria, chosen approach.
 - `plan.md` — the how, drafted in the tool's native plan mode (Claude Plan Mode, Codex plan mode, OpenCode's plan agent) and saved here once approved
 - `notes.md` — front-matter (slug, ticket, size, status, last-updated) + running log
 - `review.md` — written by `/pre-merge`
 
-**Durable architectural intelligence** at `.local/system-map/` (prefixed filenames: `inv-`, `area-`, `danger-`, `pitfall-`). Grows as tasks archive.
+**Durable architectural intelligence** is namespaced by normalized repository identity under `$AGENT_LOCAL_MEMORY_PATH/repositories/` (prefixed filenames: `inv-`, `area-`, `danger-`, `pitfall-`). It grows as tasks archive without mixing knowledge between repositories.
 
 **Typical flow:**
 
@@ -160,7 +162,11 @@ These shared skills plus the shared instructions file form a small, self-contain
 4. submit + merge →
 5. `/archive-task` (auto-suggested when PR is merged).
 
-See the design spec at `.local/active/2026-05-24-ai-native-eng-os/spec.md` (gitignored — read locally) for the full design.
+Set `AGENT_LOCAL_MEMORY_PATH` to override the default `${XDG_DATA_HOME:-$HOME/.local/share}/agent-memory`. `agent-memory root`, `agent-memory list`, and `agent-memory current` make resolution explicit. Legacy stores can be inventoried safely with `agent-memory migrate --source <repo>`, then migrated with `--apply`; migration is additive, verifies staged data before promotion, and never deletes its sources. Incomplete legacy tasks block by default and can only be imported with explicit `--materialize-missing` placeholders after reviewing the dry run.
+
+If a machine crash leaves `.migration.lock` behind, first confirm no migration
+process is running, then remove only that lock directory from the resolved
+memory root and rerun the same command. A normal failure cleans up its own lock.
 
 ---
 
@@ -202,6 +208,8 @@ Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/rom
 | `unlink-codex.sh`  | Remove only Codex symlinks                     |
 | `link-opencode.sh` | Symlink only OpenCode config                   |
 | `unlink-opencode.sh` | Remove only OpenCode symlinks                |
+| `link-agent-memory.sh` | Install the shared `agent-memory` command   |
+| `unlink-agent-memory.sh` | Remove the shared command symlink         |
 | `list-symlink.sh`  | List all active symlinks pointing to this repo |
 | `doctor.sh`        | Read-only health check: verify expected symlinks resolve (exits non-zero on failure) |
 
@@ -215,5 +223,6 @@ Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/rom
 | [asdf](https://asdf-vm.com/)                                  | Version management      |
 | [fzf](https://github.com/junegunn/fzf)                        | Fuzzy finding           |
 | [GitHub CLI](https://cli.github.com/) + `gh stack`             | Shared workflow rules   |
+| [Python](https://www.python.org/) >= 3.10                       | Agent-memory runtime    |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Claude integration      |
 | [Codex](https://developers.openai.com/codex/)                 | Codex integration       |

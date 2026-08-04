@@ -7,15 +7,17 @@ description: Use before merging your own work to verify production safety. Revie
 
 Run a production-safety review of the current task. This is broader than ordinary code review and focuses on failure modes, rollout safety, and operational readiness.
 
-> The shared workflow rules (your global agent rules) are the source of truth for the `.local/active/` layout and task statuses referenced below.
+> The shared workflow rules are the source of truth for central task memory and
+> task statuses referenced below.
 
 ## Inputs
 
-1. The current task: the most recently modified folder under `.local/active/`
+1. The current task resolved with `agent-memory current --repo <checkout>`
 2. `spec.md`
 3. `plan.md`
 4. `notes.md` frontmatter
-5. matching `.local/system-map/*.md` entries
+5. matching entries under `agent-memory system-map --repo <checkout>` for each
+   repository attached to the task
 6. the current diff against trunk
 
 Use the merge base with trunk rather than `HEAD~1`.
@@ -57,7 +59,7 @@ Mark each item `PASS`, `FAIL`, or `N/A`:
 
 ## Output
 
-Overwrite `.local/active/<slug>/review.md` with a fresh report.
+Overwrite `review.md` in the resolved current task directory with a fresh report.
 
 Structure:
 

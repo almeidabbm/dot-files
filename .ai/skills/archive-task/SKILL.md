@@ -1,6 +1,6 @@
 ---
 name: archive-task
-description: Use after a task is merged or otherwise complete to move .local/active/<slug>/ to .local/archive/<slug>/, optionally graduate durable docs into the repo, and capture long-term system-map knowledge.
+description: Use after a task is merged or otherwise complete to archive it in central agent memory, optionally graduate durable docs into the repo, and capture long-term system-map knowledge.
 ---
 
 # Archive Task
@@ -11,8 +11,8 @@ Archive a completed task and preserve any knowledge worth keeping.
 
 ### 1. Identify the task
 
-Default to the most recently modified folder under `.local/active/`.
-If more than one task looks plausible, ask which one to archive.
+Resolve the task with `agent-memory current --repo <checkout>`. If resolution is
+ambiguous, ask which task to bind or archive. Never use modification time.
 
 ### 2. Verify completion
 
@@ -56,25 +56,20 @@ Ask whether the task uncovered durable knowledge such as:
 - a repeatable pitfall
 - a useful area deep-dive
 
-If yes, write entries under `.local/system-map/` using prefixes:
+For each affected repository, resolve the destination with
+`agent-memory system-map --repo <checkout>`. Write entries using prefixes:
 
 - `inv-`
 - `area-`
 - `danger-`
 - `pitfall-`
 
-Also update `.local/system-map/INDEX.md` when adding entries.
+Also update `INDEX.md` in each affected repository namespace.
 
-### 6. Move the folder
+### 6. Archive the task
 
-Move:
-
-- `.local/active/<slug>/` -> `.local/archive/<slug>/`
-
-Then update `notes.md`:
-
-- `status: archived`
-- refreshed `last-updated`
+Run `agent-memory archive <task-id-or-slug>`. It updates the manifest and
+`notes.md`, then moves the task atomically into central archive memory.
 
 ## Output
 
@@ -86,5 +81,6 @@ Summarize:
 
 ## Edge cases
 
-- If the archive destination already exists, append a suffix such as `-take-2`.
+- If the archive destination exists, stop and inspect the identity collision;
+  do not invent a second folder name.
 - If the user says to skip graduation and system-map updates, respect that and just archive.

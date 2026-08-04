@@ -20,6 +20,7 @@ create_symlink() {
 }
 
 echo "🧠 Setting up Codex configuration..."
+"$DOTFILES_DIR/link-agent-memory.sh"
 create_symlink "$DOTFILES_DIR/.ai/shared-instructions.md" "$HOME/.codex/AGENTS.md" "Codex global rules"
 
 for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
