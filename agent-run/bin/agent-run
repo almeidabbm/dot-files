@@ -3,15 +3,24 @@
 
 A template (agent-run/templates/*.yaml) describes what an environment needs:
 resources, repositories, allowed runtimes, env, setup steps, and readiness
-checks. A provider adapter compiles it into concrete calls; this never
-executes anything against a provider itself.
+checks. A provider adapter compiles it into concrete calls.
+
+`validate` and `compile` never touch a provider. `dispatch`, `status`, and
+`rm` do: dispatch creates a VM from a compiled template and waits for its
+readiness marker, status reports on dispatched runs, and rm deletes a run's
+VM after confirmation. Run records are machine-local state under
+`~/.local/state/agent-run` (override with AGENT_RUN_STATE_PATH).
 """
 
 import argparse
+import datetime
 import json
+import os
 import pathlib
 import shlex
+import subprocess
 import sys
+import time
 
 import jsonschema
 import yaml
@@ -27,12 +36,42 @@ SETUP_SCRIPT_LIMIT = 10 * 1024
 
 WORKDIR = '"$HOME"/work'
 READY_MARKER = f"{WORKDIR}/.agent-run-ready"
+READY_MARKER_REMOTE = "~/work/.agent-run-ready"
 
 RUNTIME_PACKAGES = {"codex": "codex", "claude": "claude"}
+
+SSH_BATCH_OPTS = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new"]
+
+AUTH_HINTS = {
+    "codex": [
+        "codex login --device-auth   # finish on your phone",
+        "codex login status          # must report ChatGPT sign-in, not an API key",
+        "happy codex                 # scan the QR with the Happy app",
+    ],
+    "claude": [
+        "claude                      # choose the subscription login, complete the SSH flow",
+        "/status                     # inside claude: confirm Pro/Max subscription",
+        "happy claude                # scan the QR with the Happy app",
+    ],
+}
 
 
 class TemplateError(Exception):
     pass
+
+
+class RunError(Exception):
+    pass
+
+
+def sh(args, *, input_text=None, check=True):
+    """Single subprocess seam so tests can fake provider calls."""
+    result = subprocess.run(args, input=input_text, text=True, capture_output=True)
+    if check and result.returncode != 0:
+        raise RunError(
+            f"command failed ({result.returncode}): {' '.join(args)}\n{result.stderr.strip()}"
+        )
+    return result
 
 
 def load_template(path):
@@ -101,7 +140,8 @@ def render_setup_script(template, runtime, exe_cfg):
     return "\n".join(lines)
 
 
-def compile_exe_dev(template, runtime, name, script_path):
+def compile_exe_dev(template, runtime, name):
+    """Return (argv, setup_script) for the VM creation call. Executes nothing."""
     if runtime not in template["runtimes"]:
         raise TemplateError(
             f"runtime '{runtime}' is not allowed by template '{template['name']}' "
@@ -133,12 +173,110 @@ def compile_exe_dev(template, runtime, name, script_path):
     for tag in exe_cfg.get("tags", []) + [f"runtime-{runtime}"]:
         args.append(f"--tag={tag}")
     args.append("--setup-script=/dev/stdin")
-
-    command = " ".join(shlex.quote(a) for a in args) + f" < {shlex.quote(str(script_path))}"
-    return command, script
+    return args, script
 
 
 ADAPTERS = {"exe.dev": compile_exe_dev}
+
+
+def display_command(args, script_path):
+    return " ".join(shlex.quote(a) for a in args) + f" < {shlex.quote(str(script_path))}"
+
+
+# --- run records ------------------------------------------------------------
+
+
+def state_root():
+    override = os.environ.get("AGENT_RUN_STATE_PATH")
+    root = pathlib.Path(override) if override else pathlib.Path.home() / ".local/state/agent-run"
+    return root
+
+
+def run_record_path(name):
+    return state_root() / "runs" / f"{name}.json"
+
+
+def save_run(record):
+    path = run_record_path(record["name"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record, indent=2) + "\n")
+
+
+def load_run(name):
+    path = run_record_path(name)
+    if not path.exists():
+        raise RunError(f"no run named '{name}' (see 'agent-run status')")
+    return json.loads(path.read_text())
+
+
+def list_runs():
+    runs_dir = state_root() / "runs"
+    if not runs_dir.is_dir():
+        return []
+    records = [json.loads(p.read_text()) for p in sorted(runs_dir.glob("*.json"))]
+    return sorted(records, key=lambda r: r.get("created_at", ""), reverse=True)
+
+
+def utc_now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# --- provider operations ----------------------------------------------------
+
+
+def create_vm(argv, script):
+    result = sh(argv, input_text=script)
+    try:
+        info = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        raise RunError(f"could not parse VM creation output as JSON:\n{result.stdout.strip()}")
+    ssh_dest = info.get("ssh_dest")
+    if not ssh_dest:
+        raise RunError(f"VM creation output has no ssh_dest:\n{result.stdout.strip()}")
+    return info
+
+
+def wait_ready(ssh_dest, timeout, interval):
+    deadline = time.monotonic() + timeout
+    while True:
+        result = sh(
+            ["ssh", *SSH_BATCH_OPTS, ssh_dest, f"cat {READY_MARKER_REMOTE}"], check=False
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+        if time.monotonic() >= deadline:
+            raise RunError(
+                f"VM did not become ready within {timeout}s; check first-boot progress with: "
+                f"ssh {ssh_dest}"
+            )
+        time.sleep(interval)
+
+
+def push_prompt(ssh_dest, prompt_path):
+    content = pathlib.Path(prompt_path).read_text()
+    sh(
+        ["ssh", *SSH_BATCH_OPTS, ssh_dest, "cat > ~/work/TASK.md"],
+        input_text=content,
+    )
+
+
+def provider_vm_names():
+    """Names of VMs currently listed by exe.dev, or None if the listing is unusable."""
+    result = sh(["ssh", "exe.dev", "ls", "--json"], check=False)
+    if result.returncode != 0:
+        return None
+    try:
+        listing = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(listing, dict):
+        listing = listing.get("vms", [])
+    if not isinstance(listing, list):
+        return None
+    return {vm.get("name") for vm in listing if isinstance(vm, dict) and vm.get("name")}
+
+
+# --- commands ---------------------------------------------------------------
 
 
 def cmd_validate(args):
@@ -150,11 +288,101 @@ def cmd_compile(args):
     template = load_template(args.template)
     adapter = ADAPTERS[args.provider]
     name = args.name or f"{template['name']}-{args.runtime}"
+    argv, script = adapter(template, args.runtime, name)
     script_path = pathlib.Path(args.script_out or f"{name}-setup.sh")
-    command, script = adapter(template, args.runtime, name, script_path)
     script_path.write_text(script)
     print(f"setup script -> {script_path} ({len(script.encode())} bytes)", file=sys.stderr)
-    print(command)
+    print(display_command(argv, script_path))
+
+
+def cmd_dispatch(args):
+    template = load_template(args.template)
+    adapter = ADAPTERS[args.provider]
+    name = args.name or f"{template['name']}-{args.runtime}"
+
+    record_path = run_record_path(name)
+    if record_path.exists() and json.loads(record_path.read_text()).get("status") != "deleted":
+        raise RunError(f"run '{name}' already exists; 'agent-run rm {name}' first or pick another --name")
+
+    argv, script = adapter(template, args.runtime, name)
+    print(f"creating VM: {' '.join(shlex.quote(a) for a in argv)}", file=sys.stderr)
+    info = create_vm(argv, script)
+    record = {
+        "name": name,
+        "vm": info.get("name", name),
+        "ssh_dest": info["ssh_dest"],
+        "provider": args.provider,
+        "template": str(pathlib.Path(args.template).resolve()),
+        "runtime": args.runtime,
+        "status": "provisioning",
+        "created_at": utc_now(),
+    }
+    save_run(record)
+    print(f"created VM '{record['vm']}' ({record['ssh_dest']})", file=sys.stderr)
+
+    if args.no_wait:
+        print(f"{name}: provisioning (skipped wait; check with 'agent-run status')")
+        return
+
+    ready_at = wait_ready(record["ssh_dest"], args.wait_timeout, args.poll_interval)
+    record["status"] = "ready"
+    record["ready_at"] = ready_at
+    save_run(record)
+
+    if args.prompt_file:
+        push_prompt(record["ssh_dest"], args.prompt_file)
+        record["prompt_file"] = str(pathlib.Path(args.prompt_file).resolve())
+        save_run(record)
+        print(f"prompt copied to ~/work/TASK.md", file=sys.stderr)
+
+    print(f"{name}: ready ({record['ssh_dest']})")
+    print("\nnext, the human-only part:")
+    print(f"  ssh {record['ssh_dest']}")
+    for hint in AUTH_HINTS[args.runtime]:
+        print(f"  {hint}")
+
+
+def cmd_status(args):
+    records = list_runs()
+    if not records:
+        print("no runs; create one with 'agent-run dispatch'")
+        return
+    live = None if args.offline else provider_vm_names()
+    if live is None and not args.offline:
+        print("(could not read provider VM listing; showing local state only)", file=sys.stderr)
+    for record in records:
+        status = record["status"]
+        if live is not None and status != "deleted" and record["vm"] not in live:
+            status = "missing"
+        line = (
+            f"{record['name']:24} {status:12} {record['runtime']:6} "
+            f"{record.get('ssh_dest', '-'):28} {record['created_at']}"
+        )
+        print(line.rstrip())
+
+
+def cmd_rm(args):
+    record = load_run(args.name)
+    if record["status"] == "deleted":
+        print(f"{args.name}: already deleted")
+        return
+    live = provider_vm_names()
+    if live is not None and record["vm"] not in live:
+        record["status"] = "deleted"
+        record["deleted_at"] = utc_now()
+        save_run(record)
+        print(f"{args.name}: VM '{record['vm']}' is already gone; marked deleted")
+        return
+    if not args.yes:
+        answer = input(f"delete VM '{record['vm']}' ({record.get('ssh_dest', '?')})? [y/N] ")
+        if answer.strip().lower() not in {"y", "yes"}:
+            print("aborted")
+            return
+    sh(["ssh", "exe.dev", "rm", record["vm"]])
+    record["status"] = "deleted"
+    record["deleted_at"] = utc_now()
+    save_run(record)
+    print(f"{args.name}: deleted VM '{record['vm']}'")
 
 
 def main():
@@ -173,10 +401,30 @@ def main():
     p.add_argument("--script-out", help="where to write the generated setup script")
     p.set_defaults(func=cmd_compile)
 
+    p = sub.add_parser("dispatch", help="create a VM from a template and wait until it is ready")
+    p.add_argument("template")
+    p.add_argument("--provider", choices=sorted(ADAPTERS), default="exe.dev")
+    p.add_argument("--runtime", choices=sorted(RUNTIME_PACKAGES), required=True)
+    p.add_argument("--name", help="run and VM name (default: <template>-<runtime>)")
+    p.add_argument("--prompt-file", help="copied to ~/work/TASK.md once the VM is ready")
+    p.add_argument("--no-wait", action="store_true", help="create the VM and return immediately")
+    p.add_argument("--wait-timeout", type=int, default=900, help="seconds to wait for readiness")
+    p.add_argument("--poll-interval", type=int, default=15, help="seconds between readiness checks")
+    p.set_defaults(func=cmd_dispatch)
+
+    p = sub.add_parser("status", help="show dispatched runs and their VM state")
+    p.add_argument("--offline", action="store_true", help="skip the provider VM listing")
+    p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("rm", help="delete a run's VM and mark the run deleted")
+    p.add_argument("name")
+    p.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    p.set_defaults(func=cmd_rm)
+
     args = parser.parse_args()
     try:
         args.func(args)
-    except (TemplateError, FileNotFoundError) as e:
+    except (TemplateError, RunError, FileNotFoundError) as e:
         print(f"agent-run: {e}", file=sys.stderr)
         sys.exit(1)
 

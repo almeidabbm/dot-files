@@ -9,19 +9,37 @@ how a given provider builds it. A **provider adapter** compiles the template
 into concrete lifecycle calls. The coding-agent runtime (Codex or Claude Code)
 is a dispatch-time flag, not a template fork.
 
-`agent-run` only validates and compiles. It never executes anything against a
-provider; you review the printed command and run it yourself.
+`validate` and `compile` never touch a provider — compile prints the creation
+command for you to review. `dispatch` is the automated path: it compiles,
+creates the VM, waits for readiness, and records the run locally; `status` and
+`rm` manage dispatched runs.
 
 ## Usage
 
 ```sh
 agent-run/bin/agent-run validate agent-run/templates/lightdash-dev.yaml
 
+# manual path: review the command, run it yourself
 agent-run/bin/agent-run compile agent-run/templates/lightdash-dev.yaml \
   --runtime codex
 # setup script -> lightdash-dev-codex-setup.sh (447 bytes)
 # ssh exe.dev new --json --name=lightdash-dev-codex --cpu=4 ... < lightdash-dev-codex-setup.sh
+
+# automated path: one command per task, safe to run in parallel
+agent-run/bin/agent-run dispatch agent-run/templates/lightdash-dev.yaml \
+  --runtime codex --name task-a --prompt-file task-a.md
+agent-run/bin/agent-run dispatch agent-run/templates/lightdash-dev.yaml \
+  --runtime codex --name task-b --prompt-file task-b.md
+
+agent-run/bin/agent-run status        # run states, cross-checked against the provider
+agent-run/bin/agent-run rm task-a     # delete the VM (asks first; --yes to skip)
 ```
+
+`dispatch` creates the VM, polls for the readiness marker, copies the prompt
+file to `~/work/TASK.md`, then prints the interactive steps that remain yours
+by design: subscription login and Happy pairing on that VM. Run records live
+under `~/.local/state/agent-run/` (override with `AGENT_RUN_STATE_PATH`);
+they are machine-local state, not repo content.
 
 Requires `python3` with `pyyaml` and `jsonschema`.
 
@@ -62,7 +80,10 @@ starting agent authentication or work.
 - `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` in `env` fail validation: the pilot
   is subscription-auth only, and provider credentials never ride in a template.
 - Interactive subscription login (Codex device auth, Claude Code SSH flow) is
-  deliberately not templatable; follow the task runbook after the VM is ready.
+  deliberately not templatable; `dispatch` stops at "ready" and prints those
+  steps instead of attempting them.
+- `rm` only deletes VMs that `dispatch` created (tracked in a run record), and
+  it re-checks the provider listing before deleting anything.
 - exe.dev caps `--setup-script` at 10KiB; the compiler enforces this. Larger
   setups should move logic into the repos themselves.
 
