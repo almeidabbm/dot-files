@@ -1,0 +1,36 @@
+version: 1
+name: lightdash-dev
+description: Lightdash development sandbox for the remote agent pilot.
+
+resources:
+  cpu: 4
+  memory: 8GB
+  disk: 50GB
+
+runtimes: [codex, claude]
+
+repos:
+  - id: github.com/lightdash/lightdash
+    ref: main
+    path: lightdash
+    role: primary
+
+env:
+  NODE_ENV: development
+
+setup:
+  - update-runtimes
+  - install-happy
+  - run: corepack enable && pnpm install
+    cwd: lightdash
+
+checks:
+  - node --version
+  - pnpm --version
+  - git --version
+
+providers:
+  exe.dev:
+    image: exeuntu
+    integrations: [github]
+    tags: [agent-pilot]
