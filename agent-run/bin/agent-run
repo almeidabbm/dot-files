@@ -68,9 +68,9 @@ def sh(args, *, input_text=None, check=True):
     """Single subprocess seam so tests can fake provider calls."""
     result = subprocess.run(args, input=input_text, text=True, capture_output=True)
     if check and result.returncode != 0:
-        raise RunError(
-            f"command failed ({result.returncode}): {' '.join(args)}\n{result.stderr.strip()}"
-        )
+        # exe.dev reports errors on stdout (as JSON), so include both streams.
+        detail = "\n".join(s.strip() for s in (result.stdout, result.stderr) if s.strip())
+        raise RunError(f"command failed ({result.returncode}): {' '.join(args)}\n{detail}")
     return result
 
 
@@ -170,8 +170,11 @@ def compile_exe_dev(template, runtime, name):
         args += ["--env", f"{key}={value}"]
     for integration in exe_cfg.get("integrations", []):
         args.append(f"--integration={integration}")
-    for tag in exe_cfg.get("tags", []) + [f"runtime-{runtime}"]:
+    # Template tags are explicit user intent; run metadata rides in the comment
+    # instead of a tag because tag-scoped SSH keys reject unknown --tag values.
+    for tag in exe_cfg.get("tags", []):
         args.append(f"--tag={tag}")
+    args.append(f"--comment=agent-run template={template['name']} runtime={runtime}")
     args.append("--setup-script=/dev/stdin")
     return args, script
 
@@ -230,6 +233,8 @@ def create_vm(argv, script):
         info = json.loads(result.stdout)
     except json.JSONDecodeError:
         raise RunError(f"could not parse VM creation output as JSON:\n{result.stdout.strip()}")
+    if info.get("error"):
+        raise RunError(f"VM creation failed: {info['error']}")
     ssh_dest = info.get("ssh_dest")
     if not ssh_dest:
         raise RunError(f"VM creation output has no ssh_dest:\n{result.stdout.strip()}")
@@ -273,7 +278,8 @@ def provider_vm_names():
         listing = listing.get("vms", [])
     if not isinstance(listing, list):
         return None
-    return {vm.get("name") for vm in listing if isinstance(vm, dict) and vm.get("name")}
+    names = {vm.get("vm_name") or vm.get("name") for vm in listing if isinstance(vm, dict)}
+    return names - {None}
 
 
 # --- commands ---------------------------------------------------------------
@@ -309,7 +315,7 @@ def cmd_dispatch(args):
     info = create_vm(argv, script)
     record = {
         "name": name,
-        "vm": info.get("name", name),
+        "vm": info.get("vm_name") or info.get("name") or name,
         "ssh_dest": info["ssh_dest"],
         "provider": args.provider,
         "template": str(pathlib.Path(args.template).resolve()),

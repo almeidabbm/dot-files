@@ -71,7 +71,7 @@ class CompileTests(unittest.TestCase):
             "--env NODE_ENV=development",
             "--integration=github",
             "--tag=agent-pilot",
-            "--tag=runtime-codex",
+            "--comment=agent-run template=lightdash-dev runtime=codex",
             "--setup-script=/dev/stdin",
             "< setup.sh",
         ]:
@@ -91,7 +91,7 @@ class CompileTests(unittest.TestCase):
 
     def test_claude_runtime_swaps_only_runtime_bits(self):
         argv, script = self.compile("claude")
-        self.assertIn("--tag=runtime-claude", argv)
+        self.assertIn("--comment=agent-run template=lightdash-dev runtime=claude", argv)
         self.assertIn("sudo exeuntu update claude", script)
         self.assertNotIn("update codex", script)
 
@@ -106,6 +106,23 @@ class CompileTests(unittest.TestCase):
         template["providers"]["exe.dev"]["integrations"] = []
         _, script = agent_run.compile_exe_dev(template, "codex", "x")
         self.assertIn("https://github.com/lightdash/lightdash.git", script)
+
+
+class ProviderErrorTests(unittest.TestCase):
+    def test_sh_error_includes_stdout(self):
+        # exe.dev reports errors as JSON on stdout with an empty stderr.
+        fake = completed(returncode=1, stdout='{"error":"--tag not allowed"}')
+        with mock.patch.object(agent_run.subprocess, "run", return_value=fake):
+            with self.assertRaises(agent_run.RunError) as ctx:
+                agent_run.sh(["ssh", "exe.dev", "new"])
+        self.assertIn("--tag not allowed", str(ctx.exception))
+
+    def test_create_vm_surfaces_error_field(self):
+        fake = completed(stdout='{"error":"quota exceeded"}')
+        with mock.patch.object(agent_run, "sh", return_value=fake):
+            with self.assertRaises(agent_run.RunError) as ctx:
+                agent_run.create_vm(["ssh", "exe.dev", "new"], "script")
+        self.assertIn("quota exceeded", str(ctx.exception))
 
 
 class RunStateTestCase(unittest.TestCase):
@@ -136,7 +153,7 @@ class DispatchTests(RunStateTestCase):
 
     def test_dispatch_creates_record_and_waits_for_ready(self):
         responses = [
-            completed(stdout=json.dumps({"name": "task-a", "ssh_dest": "u123@task-a.exe.xyz"})),
+            completed(stdout=json.dumps({"vm_name": "task-a", "ssh_dest": "u123@task-a.exe.xyz"})),
             completed(returncode=1, stderr="No such file"),
             completed(stdout="2026-08-10T20:00:00Z\n"),
         ]
@@ -151,6 +168,7 @@ class DispatchTests(RunStateTestCase):
 
         self.assertEqual(calls[0][:4], ["ssh", "exe.dev", "new", "--json"])
         record = json.loads(agent_run.run_record_path("task-a").read_text())
+        self.assertEqual(record["vm"], "task-a")
         self.assertEqual(record["status"], "ready")
         self.assertEqual(record["ssh_dest"], "u123@task-a.exe.xyz")
         self.assertEqual(record["ready_at"], "2026-08-10T20:00:00Z")
@@ -211,7 +229,7 @@ class StatusAndRmTests(RunStateTestCase):
 
     def test_status_flags_missing_vms(self):
         self.seed_run()
-        listing = completed(stdout=json.dumps([{"name": "some-other-vm"}]))
+        listing = completed(stdout=json.dumps({"vms": [{"vm_name": "some-other-vm"}]}))
         with mock.patch.object(agent_run, "sh", lambda *a, **k: listing):
             with mock.patch("builtins.print") as fake_print:
                 agent_run.cmd_status(argparse.Namespace(offline=False))
