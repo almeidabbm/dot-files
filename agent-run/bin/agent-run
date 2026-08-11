@@ -167,15 +167,21 @@ def compile_exe_dev(template, runtime, name):
     if exe_cfg.get("image"):
         args.append(f"--image={exe_cfg['image']}")
     for key, value in template.get("env", {}).items():
-        args += ["--env", f"{key}={value}"]
+        args.append(f"--env={key}={value}")
     for integration in exe_cfg.get("integrations", []):
         args.append(f"--integration={integration}")
     # Template tags are explicit user intent; run metadata rides in the comment
     # instead of a tag because tag-scoped SSH keys reject unknown --tag values.
     for tag in exe_cfg.get("tags", []):
         args.append(f"--tag={tag}")
-    args.append(f"--comment=agent-run template={template['name']} runtime={runtime}")
+    args.append(f"--comment=agent-run:{template['name']}:{runtime}")
     args.append("--setup-script=/dev/stdin")
+
+    # ssh joins remote arguments with spaces and exe.dev's parser splits on
+    # them with no quoting, so no argument may contain whitespace.
+    for arg in args[2:]:
+        if len(arg.split()) > 1:
+            raise TemplateError(f"argument would be split by the provider's parser: {arg!r}")
     return args, script
 
 

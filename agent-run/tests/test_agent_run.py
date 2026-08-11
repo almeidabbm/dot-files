@@ -68,10 +68,10 @@ class CompileTests(unittest.TestCase):
             "--memory=8GB",
             "--disk=50GB",
             "--image=exeuntu",
-            "--env NODE_ENV=development",
+            "--env=NODE_ENV=development",
             "--integration=github",
             "--tag=agent-pilot",
-            "--comment=agent-run template=lightdash-dev runtime=codex",
+            "--comment=agent-run:lightdash-dev:codex",
             "--setup-script=/dev/stdin",
             "< setup.sh",
         ]:
@@ -91,7 +91,7 @@ class CompileTests(unittest.TestCase):
 
     def test_claude_runtime_swaps_only_runtime_bits(self):
         argv, script = self.compile("claude")
-        self.assertIn("--comment=agent-run template=lightdash-dev runtime=claude", argv)
+        self.assertIn("--comment=agent-run:lightdash-dev:claude", argv)
         self.assertIn("sudo exeuntu update claude", script)
         self.assertNotIn("update codex", script)
 
@@ -100,6 +100,14 @@ class CompileTests(unittest.TestCase):
         template["runtimes"] = ["codex"]
         with self.assertRaises(agent_run.TemplateError):
             agent_run.compile_exe_dev(template, "claude", "x")
+
+    def test_whitespace_in_remote_arguments_rejected(self):
+        # ssh joins remote args with spaces; exe.dev's parser has no quoting.
+        template = agent_run.load_template(TEMPLATE)
+        template["env"] = {"GREETING": "hello world"}
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.compile_exe_dev(template, "codex", "x")
+        self.assertIn("split by the provider's parser", str(ctx.exception))
 
     def test_public_clone_url_without_github_integration(self):
         template = agent_run.load_template(TEMPLATE)
