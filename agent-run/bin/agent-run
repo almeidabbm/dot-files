@@ -13,6 +13,7 @@ VM after confirmation. Run records are machine-local state under
 """
 
 import argparse
+import base64
 import datetime
 import json
 import os
@@ -240,6 +241,17 @@ def utc_now():
 # --- provider operations ----------------------------------------------------
 
 
+def vm_exec(vm, command, *, check=True):
+    """Run a command on a VM via the exe.dev gateway.
+
+    Direct `ssh <vm>.exe.xyz <command>` is unreliable (the gateway sometimes
+    routes it into its own REPL, and did so consistently for a recreated VM
+    name), so every remote command goes through `ssh exe.dev ssh <vm>`.
+    Caveat: the gateway does not forward stdin to the VM.
+    """
+    return sh(["ssh", *SSH_BATCH_OPTS, "exe.dev", "ssh", vm, command], check=check)
+
+
 def create_vm(argv, script):
     result = sh(argv, input_text=script)
     try:
@@ -254,28 +266,31 @@ def create_vm(argv, script):
     return info
 
 
-def wait_ready(ssh_dest, timeout, interval):
+def wait_ready(vm, timeout, interval):
     deadline = time.monotonic() + timeout
     while True:
-        result = sh(
-            ["ssh", *SSH_BATCH_OPTS, ssh_dest, f"cat {READY_MARKER_REMOTE}"], check=False
-        )
+        result = vm_exec(vm, f"cat {READY_MARKER_REMOTE}", check=False)
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
         if time.monotonic() >= deadline:
             raise RunError(
-                f"VM did not become ready within {timeout}s; check first-boot progress with: "
-                f"ssh {ssh_dest}"
+                f"VM did not become ready within {timeout}s; "
+                f"inspect with: agent-run logs <run-name>"
             )
         time.sleep(interval)
 
 
-def push_prompt(ssh_dest, prompt_path):
+# The gateway drops stdin, so prompt content travels base64-encoded inside the
+# command line; keep it comfortably under SSH command-length limits.
+PROMPT_LIMIT = 96 * 1024
+
+
+def push_prompt(vm, prompt_path):
     content = pathlib.Path(prompt_path).read_text()
-    sh(
-        ["ssh", *SSH_BATCH_OPTS, ssh_dest, "cat > ~/work/TASK.md"],
-        input_text=content,
-    )
+    if len(content.encode()) > PROMPT_LIMIT:
+        raise RunError(f"prompt file exceeds {PROMPT_LIMIT} bytes; put it in a repo instead")
+    encoded = base64.b64encode(content.encode()).decode()
+    vm_exec(vm, f"echo {encoded} | base64 -d > ~/work/TASK.md")
 
 
 def provider_vm_names():
@@ -343,29 +358,27 @@ def cmd_dispatch(args):
         print(f"{name}: provisioning (skipped wait; check with 'agent-run status')")
         return
 
-    ready_at = wait_ready(record["ssh_dest"], args.wait_timeout, args.poll_interval)
+    ready_at = wait_ready(record["vm"], args.wait_timeout, args.poll_interval)
     record["status"] = "ready"
     record["ready_at"] = ready_at
     save_run(record)
 
     if args.prompt_file:
-        push_prompt(record["ssh_dest"], args.prompt_file)
+        push_prompt(record["vm"], args.prompt_file)
         record["prompt_file"] = str(pathlib.Path(args.prompt_file).resolve())
         save_run(record)
         print(f"prompt copied to ~/work/TASK.md", file=sys.stderr)
 
     print(f"{name}: ready ({record['ssh_dest']})")
     print("\nnext, the human-only part:")
-    print(f"  ssh {record['ssh_dest']}")
+    print(f"  ssh -t exe.dev ssh {record['vm']}   # gateway route; direct ssh can land in the exe.dev REPL")
     for hint in AUTH_HINTS[args.runtime]:
         print(f"  {hint}")
 
 
 def probe_ready(record):
     """Re-check a provisioning run's readiness marker and update its record."""
-    result = sh(
-        ["ssh", *SSH_BATCH_OPTS, record["ssh_dest"], f"cat {READY_MARKER_REMOTE}"], check=False
-    )
+    result = vm_exec(record["vm"], f"cat {READY_MARKER_REMOTE}", check=False)
     if result.returncode == 0 and result.stdout.strip():
         record["status"] = "ready"
         record["ready_at"] = result.stdout.strip()
@@ -400,7 +413,7 @@ def cmd_logs(args):
     record = load_run(args.name)
     if record["status"] == "deleted":
         raise RunError(f"run '{args.name}' is deleted; its VM and logs are gone")
-    result = sh(["ssh", *SSH_BATCH_OPTS, record["ssh_dest"], SETUP_LOG_CMD], check=False)
+    result = vm_exec(record["vm"], SETUP_LOG_CMD, check=False)
     output = result.stdout.strip() or result.stderr.strip()
     lines = output.splitlines()
     print("\n".join(lines[-args.lines:]))

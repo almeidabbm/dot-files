@@ -1,4 +1,5 @@
 import argparse
+import base64
 import importlib.machinery
 import importlib.util
 import json
@@ -181,26 +182,37 @@ class DispatchTests(RunStateTestCase):
         self.assertEqual(record["ssh_dest"], "u123@task-a.exe.xyz")
         self.assertEqual(record["ready_at"], "2026-08-10T20:00:00Z")
 
-    def test_dispatch_pushes_prompt_file(self):
+    def test_dispatch_pushes_prompt_file_base64_via_gateway(self):
         prompt = tempfile.NamedTemporaryFile("w", suffix=".md", delete=False)
         prompt.write("do the thing")
         prompt.close()
         responses = [
-            completed(stdout=json.dumps({"name": "task-a", "ssh_dest": "u@vm"})),
+            completed(stdout=json.dumps({"vm_name": "task-a", "ssh_dest": "u@vm"})),
             completed(stdout="ready\n"),
             completed(),
         ]
         pushed = {}
 
         def fake_sh(args, input_text=None, check=True):
-            if "cat > ~/work/TASK.md" in args:
-                pushed["content"] = input_text
+            command = args[-1]
+            if "base64 -d > ~/work/TASK.md" in command:
+                # the gateway drops stdin, so content must ride in the command
+                self.assertIsNone(input_text)
+                self.assertEqual(args[-2], "task-a")  # exec targets the VM name
+                encoded = command.split()[1]
+                pushed["content"] = base64.b64decode(encoded).decode()
             return responses.pop(0)
 
         with mock.patch.object(agent_run, "sh", fake_sh):
             agent_run.cmd_dispatch(self.dispatch_args(prompt_file=prompt.name))
 
         self.assertEqual(pushed["content"], "do the thing")
+
+    def test_vm_exec_routes_through_gateway(self):
+        with mock.patch.object(agent_run, "sh", return_value=completed()) as fake:
+            agent_run.vm_exec("task-a", "cat ~/work/.agent-run-ready", check=False)
+        args = fake.call_args.args[0]
+        self.assertEqual(args[-4:], ["exe.dev", "ssh", "task-a", "cat ~/work/.agent-run-ready"])
 
     def test_dispatch_refuses_duplicate_run_name(self):
         agent_run.save_run({"name": "task-a", "status": "ready", "created_at": "x"})

@@ -32,6 +32,7 @@ agent-run/bin/agent-run dispatch agent-run/templates/lightdash-dev.yaml \
   --runtime codex --name task-b --prompt-file task-b.md
 
 agent-run/bin/agent-run status        # run states, cross-checked against the provider
+agent-run/bin/agent-run logs task-a   # tail the VM's first-boot setup log
 agent-run/bin/agent-run rm task-a     # delete the VM (asks first; --yes to skip)
 ```
 
