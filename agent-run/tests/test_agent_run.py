@@ -244,6 +244,32 @@ class StatusAndRmTests(RunStateTestCase):
         output = "\n".join(str(c.args[0]) for c in fake_print.call_args_list if c.args)
         self.assertIn("missing", output)
 
+    def test_status_promotes_provisioning_run_when_marker_exists(self):
+        self.seed_run(status="provisioning")
+        responses = [
+            completed(stdout=json.dumps({"vms": [{"vm_name": "task-a"}]})),  # provider ls
+            completed(stdout="2026-08-11T00:15:00Z\n"),  # marker probe
+        ]
+
+        def fake_sh(args, input_text=None, check=True):
+            return responses.pop(0)
+
+        with mock.patch.object(agent_run, "sh", fake_sh):
+            with mock.patch("builtins.print"):
+                agent_run.cmd_status(argparse.Namespace(offline=False))
+
+        record = json.loads(agent_run.run_record_path("task-a").read_text())
+        self.assertEqual(record["status"], "ready")
+        self.assertEqual(record["ready_at"], "2026-08-11T00:15:00Z")
+
+    def test_logs_shows_setup_journal_tail(self):
+        self.seed_run()
+        log = completed(stdout="line1\nline2\nline3\n")
+        with mock.patch.object(agent_run, "sh", return_value=log):
+            with mock.patch("builtins.print") as fake_print:
+                agent_run.cmd_logs(argparse.Namespace(name="task-a", lines=2))
+        self.assertEqual(fake_print.call_args.args[0], "line2\nline3")
+
     def test_rm_deletes_vm_and_marks_record(self):
         self.seed_run()
         responses = [

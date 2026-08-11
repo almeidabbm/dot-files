@@ -40,7 +40,14 @@ READY_MARKER_REMOTE = "~/work/.agent-run-ready"
 
 RUNTIME_PACKAGES = {"codex": "codex", "claude": "claude"}
 
-SSH_BATCH_OPTS = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new"]
+SSH_BATCH_OPTS = [
+    "-o", "BatchMode=yes",
+    "-o", "StrictHostKeyChecking=accept-new",
+    "-o", "ConnectTimeout=10",
+]
+
+# exe.dev's first-boot setup script logs to the journal under this tag.
+SETUP_LOG_CMD = "sudo journalctl -t exe-setup --no-pager"
 
 AUTH_HINTS = {
     "codex": [
@@ -354,6 +361,18 @@ def cmd_dispatch(args):
         print(f"  {hint}")
 
 
+def probe_ready(record):
+    """Re-check a provisioning run's readiness marker and update its record."""
+    result = sh(
+        ["ssh", *SSH_BATCH_OPTS, record["ssh_dest"], f"cat {READY_MARKER_REMOTE}"], check=False
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        record["status"] = "ready"
+        record["ready_at"] = result.stdout.strip()
+        save_run(record)
+    return record
+
+
 def cmd_status(args):
     records = list_runs()
     if not records:
@@ -363,14 +382,28 @@ def cmd_status(args):
     if live is None and not args.offline:
         print("(could not read provider VM listing; showing local state only)", file=sys.stderr)
     for record in records:
+        if record["status"] == "provisioning" and not args.offline:
+            record = probe_ready(record)
         status = record["status"]
         if live is not None and status != "deleted" and record["vm"] not in live:
             status = "missing"
+        if status == "provisioning":
+            status = "provisioning?"  # stalled or in progress; see 'agent-run logs'
         line = (
             f"{record['name']:24} {status:12} {record['runtime']:6} "
             f"{record.get('ssh_dest', '-'):28} {record['created_at']}"
         )
         print(line.rstrip())
+
+
+def cmd_logs(args):
+    record = load_run(args.name)
+    if record["status"] == "deleted":
+        raise RunError(f"run '{args.name}' is deleted; its VM and logs are gone")
+    result = sh(["ssh", *SSH_BATCH_OPTS, record["ssh_dest"], SETUP_LOG_CMD], check=False)
+    output = result.stdout.strip() or result.stderr.strip()
+    lines = output.splitlines()
+    print("\n".join(lines[-args.lines:]))
 
 
 def cmd_rm(args):
@@ -427,6 +460,11 @@ def main():
     p = sub.add_parser("status", help="show dispatched runs and their VM state")
     p.add_argument("--offline", action="store_true", help="skip the provider VM listing")
     p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("logs", help="show a run's first-boot setup log")
+    p.add_argument("name")
+    p.add_argument("--lines", type=int, default=40, help="log lines to show (default 40)")
+    p.set_defaults(func=cmd_logs)
 
     p = sub.add_parser("rm", help="delete a run's VM and mark the run deleted")
     p.add_argument("name")
