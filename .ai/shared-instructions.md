@@ -113,7 +113,6 @@ last-updated: <ISO timestamp>
 - When the user starts new work, mentions an issue, or wants to scope a feature, use the `start-task` workflow.
 - When the user asks what they were working on or seems disoriented, use the `status` workflow.
 - When implementation is done and tests pass, use the `pre-merge` workflow before shipping.
-- When the user asks for a diff review, use the `code-review` workflow.
 - After a PR is merged or the user wants to wrap up the task, use the `archive-task` workflow.
 
 ## Spec And Plan Files

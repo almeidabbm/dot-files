@@ -69,8 +69,7 @@ flowchart TD
     spec --> impl["implement on a feature branch<br/>status: implementing"]
     impl --> pm["/pre-merge<br/>writes review.md"]
     pm -->|blocking issues| impl
-    pm -->|clean → ready-to-ship| cr["/code-review<br/>optional diff-quality pass"]
-    cr --> ship["push / submit PR<br/>feature push OK · main blocked by guard"]
+    pm -->|clean → ready-to-ship| ship["push / submit PR<br/>feature push OK · main blocked by guard"]
     ship --> arch["/archive-task<br/>active/ → archive/"]
     st -.->|"where was I?"| status["/status<br/>read-only task view"]
     impl -.-> status
@@ -94,7 +93,7 @@ Claude uses the shared workflow rules from [`.ai/shared-instructions.md`](.ai/sh
 
 **Shared repo workflow skills** live in [`.ai/skills/`](.ai/skills/) and are symlinked into Claude's native skills folder by `link-claude.sh`.
 
-**Skills:** Claude surfaces the shared workflow skills as slash commands — `/start-task`, `/status`, `/pre-merge`, `/archive-task`, `/code-review`. See the [shared skills table](#shared-source).
+**Skills:** Claude surfaces the shared workflow skills as slash commands — `/start-task`, `/status`, `/pre-merge`, `/archive-task`. See the [shared skills table](#shared-source).
 
 ### Codex
 
@@ -123,7 +122,6 @@ The shared skills (slash commands in Claude — `/start-task` etc.; skills of th
 | `status`       | Read-only view of every active task with status, size, and next-step suggestion.                                  |
 | `pre-merge`    | Production-safety gate: adversarial review + hardening checklist against spec, plan, system-map, and the diff.     |
 | `archive-task` | Lifecycle close-out. Moves `active/<slug>/` → `archive/<slug>/`, optionally graduates docs to the repo.           |
-| `code-review`  | Reviews a diff, branch, or PR for correctness, security, types, architecture, and tests.                          |
 | `orchestrate`  | Coordinates a ticket, epic, or milestone across tracker state, tasks, repositories, branches, and pull requests. |
 
 The link scripts project those shared files into each tool's native structure:
