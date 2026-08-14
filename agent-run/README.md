@@ -238,6 +238,27 @@ the chosen runtime and configures it, so no credential is written to the VM and
 no login happens. A template without that step leaves the runtime unauthenticated,
 and `dispatch` then prints the manual login to run before `agent-run run`.
 
+## Three ways to start work
+
+| You want | Command |
+| --- | --- |
+| Run a task and walk away | `agent-run run <name> --prompt-file <file>` |
+| Drive the runtime by hand | `agent-run run <name> --interactive`, then `attach` |
+| Just a shell on the box | `agent-run shell <name>` |
+
+`--prompt-file` is required the first time. It becomes optional afterwards, because
+a run leaves its prompt at `~/work/TASK.md` and a repeat run reuses it — which is the
+whole point of the flag being optional. Starting with neither a prompt nor
+`--interactive` is refused: the runtime would read an empty task, answer a question
+nobody asked, and exit 0.
+
+`--interactive` starts the runtime's own UI instead of a one-shot task. It reads no
+prompt and captures no log, so `logs` has nothing to show for it — the tmux session
+is the record. It takes the same `--sandbox`, mapped per runtime.
+
+`shell` involves no agent at all: an interactive shell on the VM, for reading the
+checkout, running tests yourself, or finishing a manual login.
+
 ## Watching a run
 
 Four questions, four commands:
