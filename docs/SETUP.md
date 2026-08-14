@@ -328,7 +328,7 @@ You want two integrations:
 | Integration | Gives you | Set up with |
 | --- | --- | --- |
 | `llm` | Model access with no credential on the VM | usually present already; check `int list` |
-| `github` | Cloning private repos with no token on the VM | `ssh exe.dev` then `int setup`, interactively |
+| `github` | Cloning private repos with no token on the VM | link GitHub in the browser, then `int add github …` |
 
 The `llm` integration is what makes headless runs possible. Both Codex and Claude Code
 reach the model through `llm.int.exe.xyz`, with the credential injected at the network
@@ -342,11 +342,47 @@ For the `github` integration, prefer read-only until a task genuinely needs to p
 int add github --name=github --repository=lightdash/lightdash --readonly
 ```
 
-Two known constraints:
+#### Reaching the web UI
 
-- Your SSH key is **tag-scoped**, so custom `--tag` values are rejected. `agent-run` puts
-  run metadata in `--comment` instead.
-- Fix key scope, and do integration setup, in the web UI: `ssh exe.dev browser`.
+Some setup is browser-only, and the shortcut for getting there may not work for you:
+
+```console
+$ ssh exe.dev browser
+command not allowed by SSH key permissions
+```
+
+`browser` generates a magic link to the website, and an exe.dev SSH key carries a `cmds`
+allowlist that can exclude it. That blocks the shortcut, not the destination — sign in
+directly at **<https://exe.dev>** with "Login / Register" using the email from
+`ssh exe.dev whoami`.
+
+Run `ssh exe.dev help` to see which commands your key does allow; `ssh exe.dev doc
+https-api` documents the permission model, where `cmds` lists the permitted commands.
+
+The same allowlist is why your key is **tag-scoped** and rejects custom `--tag` values —
+`agent-run` puts run metadata in `--comment` instead.
+
+#### Connecting a ChatGPT subscription
+
+Only needed if you want the OpenAI provider to use your personal ChatGPT plan rather than
+exe.dev's managed gateway. Per exe.dev's own docs this is browser-only, and it is
+available **only on a personal LLM integration** — a team integration can use the gateway
+or an API key, not a subscription.
+
+1. Enable device-code login in ChatGPT's security settings (personal account) or
+   workspace permissions (workspace admin).
+2. At <https://exe.dev>, open **Integrations → LLM**.
+3. Connect the ChatGPT account, then select it as the OpenAI source.
+
+#### Connecting GitHub
+
+Also from **Integrations** in the browser: link your GitHub account, which installs the
+exe.dev GitHub App into your account or organisation. Only after that can you create
+per-repo integrations, which you can do over SSH:
+
+```text
+int add github --name=github --repository=lightdash/lightdash --readonly
+```
 
 ### 2. Our repos
 
@@ -450,4 +486,4 @@ The trade-off table lives in [`agent-run/README.md`](../agent-run/README.md#choo
 | `error: unexpected argument` from a runtime | The gateway stripped shell quoting | Put the command in a script and push it; `agent-run` does this already |
 | Agent cannot create a branch | `workspace-write` makes `.git` read-only | `--sandbox danger-full-access` |
 | `monitor` says tmux is missing | No local tmux | `brew install tmux`, or use `logs --follow` and `attach`, which need none |
-| Clone fails on a private repo | No `github` integration | Create it interactively: `ssh exe.dev` then `int setup` |
+| Clone fails on a private repo | No `github` integration | Link GitHub at <https://exe.dev> → Integrations, then `int add github …` |
