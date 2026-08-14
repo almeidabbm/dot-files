@@ -484,6 +484,13 @@ def render_runner(runtime, sandbox, workdir):
             f'WORKDIR="{shell_path(workdir)}"',
             'cd "$WORKDIR" || exit 1',
             f"rm -f {shell_path(AGENT_EXIT_REMOTE)}",
+            # An empty prompt makes the runtime answer a question nobody asked
+            # and exit 0. Fail here instead, so the run reports a real failure.
+            f'if [ ! -s {shell_path(PROMPT_REMOTE)} ]; then',
+            f'  echo "no task prompt at {PROMPT_REMOTE}" >&2',
+            f"  echo 2 > {shell_path(AGENT_EXIT_REMOTE)}",
+            "  exit 2",
+            "fi",
             f"{command} 2>&1 | tee -a {shell_path(AGENT_LOG_REMOTE)}",
             "rc=${PIPESTATUS[0]}",
             f"echo $rc > {shell_path(AGENT_EXIT_REMOTE)}",
@@ -708,6 +715,16 @@ def cmd_run(args):
     if args.prompt_file:
         push_prompt(record["vm"], args.prompt_file)
         record["prompt_file"] = str(pathlib.Path(args.prompt_file).resolve())
+    else:
+        # Without a prompt the runtime reads an empty task, replies "what would
+        # you like me to work on?", and exits 0 — a no-op reporting success.
+        probe = vm_exec(record["vm"], f"test -s {PROMPT_REMOTE} && echo PRESENT", check=False)
+        if "PRESENT" not in probe.stdout:
+            raise RunError(
+                f"no task prompt on '{args.name}': pass --prompt-file <file>. "
+                f"It is optional only on a repeat run, where an earlier one left "
+                f"a prompt at {PROMPT_REMOTE}."
+            )
 
     workdir = record.get("workdir", "~/work")
     push_file(record["vm"], RUNNER_REMOTE, render_runner(record["runtime"], args.sandbox, workdir))

@@ -416,7 +416,8 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("--sandbox danger-full-access", script)
         self.assertIn('cd "$WORKDIR"', script)
         # tmux's session lifetime is the agent's, so the runner must not background.
-        self.assertNotIn("&", script.replace("2>&1", "").replace("&&", ""))
+        for line in script.splitlines():
+            self.assertFalse(line.rstrip().endswith("&"), f"backgrounded: {line}")
         self.assertIn("rc=${PIPESTATUS[0]}", script)
         self.assertIn(agent_run.shell_path(agent_run.AGENT_EXIT_REMOTE), script)
 
@@ -488,6 +489,8 @@ class ObserveTests(RunStateTestCase):
 
         def fake_sh(args, input_text=None, check=True):
             calls.append(args[-1])
+            if "test -s" in args[-1]:
+                return completed(stdout="PRESENT\n")
             return completed(stdout="DONE:0\n")
 
         with mock.patch.object(agent_run, "sh", fake_sh):
@@ -793,3 +796,42 @@ class TagScopedKeyHintTests(unittest.TestCase):
             with self.assertRaises(agent_run.RunError) as ctx:
                 agent_run.create_vm(["ssh", "exe.dev", "new"], "script")
         self.assertEqual(str(ctx.exception), "quota exceeded")
+
+
+class PromptRequiredTests(RunStateTestCase):
+    def seed(self, **extra):
+        record = {
+            "name": "task-a", "vm": "task-a", "ssh_dest": "u@vm", "provider": "exe.dev",
+            "template": "t.yaml", "runtime": "codex", "status": "ready",
+            "created_at": "2026-08-14T06:00:00Z", "workdir": "~/work/repo",
+        }
+        record.update(extra)
+        agent_run.save_run(record)
+
+    def test_run_without_a_prompt_refuses_when_the_vm_has_none(self):
+        # Otherwise the runtime answers "what would you like me to work on?"
+        # and exits 0 — a no-op that looks like success.
+        self.seed()
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(stdout="")):
+            with self.assertRaises(agent_run.RunError) as ctx:
+                agent_run.cmd_run(run_args("task-a"))
+        self.assertIn("--prompt-file", str(ctx.exception))
+
+    def test_run_without_a_prompt_proceeds_when_an_earlier_run_left_one(self):
+        self.seed()
+        calls = []
+
+        def fake_sh(args, input_text=None, check=True):
+            calls.append(args[-1])
+            if "test -s" in args[-1]:
+                return completed(stdout="PRESENT\n")
+            return completed(stdout="DONE:0\n")
+
+        with mock.patch.object(agent_run, "sh", fake_sh):
+            agent_run.cmd_run(run_args("task-a"))
+        self.assertTrue(any("tmux new-session" in c for c in calls))
+
+    def test_runner_refuses_an_empty_prompt_with_a_nonzero_exit(self):
+        script = agent_run.render_runner("codex", "workspace-write", "~/work/repo")
+        self.assertIn("no task prompt", script)
+        self.assertIn("exit 2", script)
