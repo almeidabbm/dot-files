@@ -31,6 +31,24 @@ def completed(returncode=0, stdout="", stderr=""):
     return subprocess.CompletedProcess([], returncode, stdout, stderr)
 
 
+def status_args(**overrides):
+    defaults = dict(offline=False, json=False)
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
+def logs_args(name, **overrides):
+    defaults = dict(name=name, lines=40, source="auto", follow=False)
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
+def run_args(name, **overrides):
+    defaults = dict(name=name, prompt_file=None, sandbox="workspace-write", force=False)
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
 class ValidateTests(unittest.TestCase):
     def test_example_template_is_valid(self):
         template = agent_run.load_template(TEMPLATE)
@@ -199,7 +217,7 @@ class DispatchTests(RunStateTestCase):
                 # the gateway drops stdin, so content must ride in the command
                 self.assertIsNone(input_text)
                 self.assertEqual(args[-2], "task-a")  # exec targets the VM name
-                encoded = command.split()[1]
+                encoded = command.split("echo ")[1].split()[0]
                 pushed["content"] = base64.b64decode(encoded).decode()
             return responses.pop(0)
 
@@ -292,7 +310,7 @@ class StatusAndRmTests(RunStateTestCase):
         listing = completed(stdout=json.dumps({"vms": [{"vm_name": "some-other-vm"}]}))
         with mock.patch.object(agent_run, "sh", lambda *a, **k: listing):
             with mock.patch("builtins.print") as fake_print:
-                agent_run.cmd_status(argparse.Namespace(offline=False))
+                agent_run.cmd_status(status_args())
         output = "\n".join(str(c.args[0]) for c in fake_print.call_args_list if c.args)
         self.assertIn("missing", output)
 
@@ -308,7 +326,7 @@ class StatusAndRmTests(RunStateTestCase):
 
         with mock.patch.object(agent_run, "sh", fake_sh):
             with mock.patch("builtins.print"):
-                agent_run.cmd_status(argparse.Namespace(offline=False))
+                agent_run.cmd_status(status_args())
 
         record = json.loads(agent_run.run_record_path("task-a").read_text())
         self.assertEqual(record["status"], "ready")
@@ -326,7 +344,7 @@ class StatusAndRmTests(RunStateTestCase):
 
         with mock.patch.object(agent_run, "sh", fake_sh):
             with mock.patch("builtins.print"):
-                agent_run.cmd_status(argparse.Namespace(offline=False))
+                agent_run.cmd_status(status_args())
 
         record = json.loads(agent_run.run_record_path("task-a").read_text())
         self.assertEqual(record["status"], "provisioning")
@@ -337,7 +355,7 @@ class StatusAndRmTests(RunStateTestCase):
         log = completed(stdout="line1\nline2\nline3\n")
         with mock.patch.object(agent_run, "sh", return_value=log):
             with mock.patch("builtins.print") as fake_print:
-                agent_run.cmd_logs(argparse.Namespace(name="task-a", lines=2))
+                agent_run.cmd_logs(logs_args("task-a", lines=2, source="setup"))
         self.assertEqual(fake_print.call_args.args[0], "line2\nline3")
 
     def test_rm_deletes_vm_and_marks_record(self):
@@ -379,3 +397,218 @@ class StatusAndRmTests(RunStateTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RunnerTests(unittest.TestCase):
+    def test_runner_carries_sandbox_and_captures_exit_code(self):
+        script = agent_run.render_runner("codex", "danger-full-access", "~/work/repo")
+        self.assertIn("--sandbox danger-full-access", script)
+        self.assertIn('cd "$WORKDIR"', script)
+        # tmux's session lifetime is the agent's, so the runner must not background.
+        self.assertNotIn("&", script.replace("2>&1", "").replace("&&", ""))
+        self.assertIn("rc=${PIPESTATUS[0]}", script)
+        self.assertIn(agent_run.shell_path(agent_run.AGENT_EXIT_REMOTE), script)
+
+    def test_runner_reads_the_prompt_from_a_file(self):
+        # Model-facing text must never be interpolated into a gateway command.
+        script = agent_run.render_runner("codex", "workspace-write", "~/work/repo")
+        self.assertIn(f"$(cat {agent_run.shell_path(agent_run.PROMPT_REMOTE)})", script)
+
+    def test_unknown_sandbox_rejected(self):
+        with self.assertRaises(agent_run.RunError):
+            agent_run.render_runner("codex", "wide-open", "~/work")
+
+    def test_unknown_runtime_rejected(self):
+        with self.assertRaises(agent_run.RunError):
+            agent_run.render_runner("gopher", "workspace-write", "~/work")
+
+    def test_primary_workdir_prefers_the_primary_repo(self):
+        template = {
+            "repos": [
+                {"id": "github.com/o/tools", "path": "tools", "role": "support"},
+                {"id": "github.com/o/app", "role": "primary"},
+            ]
+        }
+        self.assertEqual(agent_run.primary_workdir(template), "~/work/app")
+
+    def test_primary_workdir_without_repos(self):
+        self.assertEqual(agent_run.primary_workdir({"repos": []}), "~/work")
+
+
+class AgentStateTests(unittest.TestCase):
+    def test_parses_running_and_exit_codes(self):
+        self.assertEqual(agent_run.parse_agent_state("RUNNING\n"), "running")
+        self.assertEqual(agent_run.parse_agent_state("DONE:0\n"), "exited(0)")
+        self.assertEqual(agent_run.parse_agent_state("DONE:2\n"), "exited(2)")
+
+    def test_unknown_exit_code_is_still_reported_as_exited(self):
+        self.assertEqual(agent_run.parse_agent_state("DONE:?\n"), "exited(?)")
+
+    def test_unreadable_probe_is_not_mistaken_for_a_state(self):
+        # The gateway folds stderr into stdout and exits 0; junk must not parse.
+        self.assertIsNone(agent_run.parse_agent_state("bash: tmux: command not found\n"))
+        self.assertIsNone(agent_run.parse_agent_state(""))
+
+    def test_probe_command_is_whitespace_quoting_free(self):
+        self.assertNotIn('"', agent_run.AGENT_STATE_CMD)
+        self.assertNotIn("'", agent_run.AGENT_STATE_CMD)
+
+
+class ObserveTests(RunStateTestCase):
+    def seed(self, name="task-a", **extra):
+        record = {
+            "name": name,
+            "vm": name,
+            "ssh_dest": "u@vm",
+            "provider": "exe.dev",
+            "template": "t.yaml",
+            "runtime": "codex",
+            "status": "ready",
+            "created_at": "2026-08-14T05:00:00Z",
+            "workdir": "~/work/dot-files",
+        }
+        record.update(extra)
+        agent_run.save_run(record)
+        return record
+
+    def test_run_starts_a_detached_tmux_session_and_records_it(self):
+        self.seed()
+        calls = []
+
+        def fake_sh(args, input_text=None, check=True):
+            calls.append(args[-1])
+            return completed(stdout="DONE:0\n")
+
+        with mock.patch.object(agent_run, "sh", fake_sh):
+            agent_run.cmd_run(run_args("task-a", sandbox="danger-full-access"))
+
+        self.assertTrue(any("tmux new-session -d -s agent" in c for c in calls))
+        record = json.loads(agent_run.run_record_path("task-a").read_text())
+        self.assertEqual(record["tmux_session"], "agent")
+        self.assertEqual(record["sandbox"], "danger-full-access")
+        self.assertTrue(record["started_at"])
+
+    def test_run_refuses_a_vm_that_is_not_ready(self):
+        self.seed(status="provisioning")
+        with self.assertRaises(agent_run.RunError) as ctx:
+            agent_run.cmd_run(run_args("task-a"))
+        self.assertIn("not ready", str(ctx.exception))
+
+    def test_run_refuses_to_double_start_without_force(self):
+        self.seed(started_at="2026-08-14T05:01:00Z")
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(stdout="RUNNING\n")):
+            with self.assertRaises(agent_run.RunError) as ctx:
+                agent_run.cmd_run(run_args("task-a"))
+        self.assertIn("already running", str(ctx.exception))
+
+    def test_attach_refuses_when_no_agent_is_live(self):
+        self.seed(started_at="2026-08-14T05:01:00Z")
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(stdout="DONE:0\n")):
+            with self.assertRaises(agent_run.RunError) as ctx:
+                agent_run.cmd_attach(argparse.Namespace(name="task-a"))
+        self.assertIn("no live agent", str(ctx.exception))
+
+    def test_attach_and_follow_route_through_the_gateway(self):
+        self.assertEqual(
+            agent_run.attach_argv("task-a"),
+            ["ssh", "-t", "exe.dev", "ssh", "task-a", "tmux", "attach", "-t", "agent"],
+        )
+        self.assertEqual(
+            agent_run.follow_argv("task-a", "~/work/agent.log"),
+            ["ssh", "exe.dev", "ssh", "task-a", "tail", "-n", "200", "-f", "~/work/agent.log"],
+        )
+
+    def test_logs_defaults_to_setup_before_the_agent_starts(self):
+        self.seed()
+        seen = []
+
+        def fake_sh(args, input_text=None, check=True):
+            seen.append(args[-1])
+            return completed(stdout="boot line\n")
+
+        with mock.patch.object(agent_run, "sh", fake_sh), mock.patch("builtins.print"):
+            agent_run.cmd_logs(logs_args("task-a"))
+        self.assertIn(agent_run.SETUP_LOG_CMD, seen)
+
+    def test_logs_defaults_to_the_agent_once_started(self):
+        self.seed(started_at="2026-08-14T05:01:00Z", agent_log="~/work/agent.log")
+        seen = []
+
+        def fake_sh(args, input_text=None, check=True):
+            seen.append(args[-1])
+            return completed(stdout="agent line\n")
+
+        with mock.patch.object(agent_run, "sh", fake_sh), mock.patch("builtins.print"):
+            agent_run.cmd_logs(logs_args("task-a"))
+        self.assertTrue(any("tail -n 40 ~/work/agent.log" in c for c in seen))
+
+    def test_status_json_reports_agent_state(self):
+        self.seed(started_at="2026-08-14T05:01:00Z")
+        responses = [
+            completed(stdout=json.dumps({"vms": [{"vm_name": "task-a"}]})),
+            completed(stdout="RUNNING\n"),
+        ]
+        printed = []
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: responses.pop(0)):
+            with mock.patch("builtins.print", lambda *a, **k: printed.append(a[0] if a else "")):
+                agent_run.cmd_status(status_args(json=True))
+        payload = json.loads(printed[-1])
+        self.assertEqual(payload["runs"][0]["agent"], "running")
+        self.assertEqual(payload["runs"][0]["vm_status"], "ready")
+
+
+class MonitorPlanTests(unittest.TestCase):
+    def test_opens_new_windows_and_prunes_gone_ones(self):
+        add, kill = agent_run.plan_monitor_windows(["a", "b"], ["b", "c"])
+        self.assertEqual((add, kill), (["c"], ["a"]))
+
+    def test_untouched_when_nothing_changed(self):
+        # Refreshing must not disturb the window you are watching.
+        self.assertEqual(agent_run.plan_monitor_windows(["a", "b"], ["a", "b"]), ([], []))
+
+
+class ShellPathTests(unittest.TestCase):
+    def test_tilde_becomes_home_so_it_survives_quoting(self):
+        # Bash expands a bare ~ but not a quoted one; every path here is quoted.
+        self.assertEqual(agent_run.shell_path("~/work/repo"), "$HOME/work/repo")
+        self.assertEqual(agent_run.shell_path("~"), "$HOME")
+
+    def test_absolute_and_relative_paths_are_untouched(self):
+        self.assertEqual(agent_run.shell_path("/srv/repo"), "/srv/repo")
+        self.assertEqual(agent_run.shell_path("work/repo"), "work/repo")
+
+    def test_runner_never_quotes_a_bare_tilde(self):
+        # The regression: WORKDIR="~/work/x" made cd fail and killed the session.
+        script = agent_run.render_runner("codex", "workspace-write", "~/work/repo")
+        self.assertNotIn('"~', script)
+        self.assertIn('WORKDIR="$HOME/work/repo"', script)
+
+
+class MonitorPreconditionTests(RunStateTestCase):
+    def test_monitor_explains_how_to_get_tmux_and_what_works_without_it(self):
+        with mock.patch.object(agent_run.shutil, "which", return_value=None):
+            with self.assertRaises(agent_run.RunError) as ctx:
+                agent_run.cmd_monitor(argparse.Namespace(session="s"))
+        message = str(ctx.exception)
+        self.assertIn("brew install tmux", message)
+        self.assertIn("attach", message)  # the path that needs no local tmux
+
+
+class SandboxAcrossRuntimesTests(unittest.TestCase):
+    def test_every_sandbox_mode_reaches_the_claude_command_line(self):
+        # A flag that silently does nothing is worse than no flag.
+        for mode, expected in [
+            ("read-only", "plan"),
+            ("workspace-write", "acceptEdits"),
+            ("danger-full-access", "bypassPermissions"),
+        ]:
+            script = agent_run.render_runner("claude", mode, "~/work/repo")
+            self.assertIn(f"--permission-mode {expected}", script)
+
+    def test_every_sandbox_mode_reaches_the_codex_command_line(self):
+        for mode in agent_run.SANDBOX_MODES:
+            script = agent_run.render_runner("codex", mode, "~/work/repo")
+            self.assertIn(f"--sandbox {mode}", script)
+
+    def test_both_runtimes_cover_every_declared_mode(self):
+        self.assertEqual(set(agent_run.CLAUDE_PERMISSION_MODE), set(agent_run.SANDBOX_MODES))
