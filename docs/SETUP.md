@@ -323,12 +323,34 @@ ssh exe.dev ls --json    # lists your VMs; {"vms":[]} is a clean slate
 ssh exe.dev int list     # lists integrations
 ```
 
-You want two integrations:
+You want integrations of two kinds:
 
-| Integration | Gives you | Set up with |
+| Kind | Gives you | Attach as |
 | --- | --- | --- |
-| `llm` | Model access with no credential on the VM | usually present already; check `int list` |
-| `github` | Cloning private repos with no token on the VM | link GitHub in the browser, then `int add github …` |
+| `llm` | Model access with no credential on the VM | `auto:all` |
+| `github` | Cloning private repos with no token on the VM | one per repo, then `--integration=<name>` at creation |
+
+**Attachment matters more than it looks.** An exe.dev SSH key is scoped to a single tag,
+and yours is scoped to a tag named after the key type:
+
+```console
+$ ssh exe.dev new --tag=my-tag ...
+{"error":"--tag SSH key scoped to tag \"ssh-ed25519\" can only use --tag=ssh-ed25519"}
+```
+
+Every VM the key creates is auto-tagged `ssh-ed25519`, and no other tag can be set — so an
+integration attached to any *other* tag can never reach your VMs. Attach LLM integrations
+to `auto:all` (or to `tag:ssh-ed25519`), and attach repo integrations per VM with
+`--integration=<name>`, which `agent-run` compiles from the template.
+
+**Do not assume the integration named `llm` is the right one.** An account can hold
+several: one may serve OpenAI from a personal ChatGPT subscription while another serves
+Anthropic from the managed gateway. `exeuntu configure <agent>` always targets the one
+literally named `llm`, so it picks the wrong source the moment providers are split — and
+the resulting failure looks like a broken runtime rather than a misrouted request.
+`agent-run`'s `configure-llm-integration` step instead asks
+`reflection.int.exe.xyz/integrations` what is attached, asks each candidate which models
+it serves, uses the one matching the runtime, and exits non-zero when none does.
 
 The `llm` integration is what makes headless runs possible. Both Codex and Claude Code
 reach the model through `llm.int.exe.xyz`, with the credential injected at the network
