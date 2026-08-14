@@ -5,9 +5,12 @@ import importlib.util
 import json
 import os
 import pathlib
+import re
 import subprocess
 import tempfile
 import unittest
+
+import yaml
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -17,7 +20,8 @@ spec = importlib.util.spec_from_loader("agent_run", loader)
 agent_run = importlib.util.module_from_spec(spec)
 loader.exec_module(agent_run)
 
-TEMPLATE = ROOT / "templates" / "lightdash-dev.yaml"
+# Compiler tests use a fixture, so evolving a real template cannot break them.
+TEMPLATE = ROOT / "tests" / "fixtures" / "example.yaml"
 
 
 def write_yaml(content):
@@ -52,7 +56,7 @@ def run_args(name, **overrides):
 class ValidateTests(unittest.TestCase):
     def test_example_template_is_valid(self):
         template = agent_run.load_template(TEMPLATE)
-        self.assertEqual(template["name"], "lightdash-dev")
+        self.assertEqual(template["name"], "example-app")
 
     def test_missing_runtimes_rejected(self):
         path = write_yaml(
@@ -75,14 +79,14 @@ class ValidateTests(unittest.TestCase):
 class CompileTests(unittest.TestCase):
     def compile(self, runtime="codex"):
         template = agent_run.load_template(TEMPLATE)
-        return agent_run.compile_exe_dev(template, runtime, f"lightdash-dev-{runtime}")
+        return agent_run.compile_exe_dev(template, runtime, f"example-app-{runtime}")
 
     def test_command_carries_template_settings(self):
         argv, _ = self.compile()
         command = agent_run.display_command(argv, "setup.sh")
         for expected in [
             "ssh exe.dev new --json",
-            "--name=lightdash-dev-codex",
+            "--name=example-app-codex",
             "--cpu=4",
             "--memory=8GB",
             "--disk=50GB",
@@ -90,7 +94,7 @@ class CompileTests(unittest.TestCase):
             "--env=NODE_ENV=development",
             "--integration=github",
             "--tag=agent-pilot",
-            "--comment=agent-run:lightdash-dev:codex",
+            "--comment=agent-run:example-app:codex",
             "--setup-script=/dev/stdin",
             "< setup.sh",
         ]:
@@ -110,7 +114,7 @@ class CompileTests(unittest.TestCase):
 
     def test_claude_runtime_swaps_only_runtime_bits(self):
         argv, script = self.compile("claude")
-        self.assertIn("--comment=agent-run:lightdash-dev:claude", argv)
+        self.assertIn("--comment=agent-run:example-app:claude", argv)
         self.assertIn("sudo exeuntu update claude", script)
         self.assertNotIn("update codex", script)
 
@@ -637,3 +641,62 @@ class MonitorSessionTests(RunStateTestCase):
             any(a[:2] == ["tmux", "set-option"] and "remain-on-exit" in a for a in calls),
             "dashboard session must set remain-on-exit",
         )
+
+
+class ConfigureStepTests(unittest.TestCase):
+    def test_configure_step_renders_per_runtime(self):
+        template = {
+            "name": "t", "runtimes": ["codex", "claude"],
+            "repos": [{"id": "github.com/o/r"}],
+            "setup": ["configure-llm-integration"],
+        }
+        for runtime in ("codex", "claude"):
+            _, script = agent_run.compile_exe_dev(template, runtime, "x")
+            self.assertIn(f"exeuntu configure {runtime}", script)
+
+    def test_configure_step_needs_no_credential_in_the_template(self):
+        # The gateway injects the credential; the template stays secret-free.
+        template = {
+            "name": "t", "runtimes": ["codex"],
+            "repos": [{"id": "github.com/o/r"}],
+            "setup": ["configure-llm-integration"],
+        }
+        _, script = agent_run.compile_exe_dev(template, "codex", "x")
+        self.assertNotIn("api", script.lower().replace("api_key_placeholder", ""))
+
+
+class ShippedTemplateTests(unittest.TestCase):
+    """Every template in templates/ must stay valid and dispatchable."""
+
+    def test_all_shipped_templates_validate_and_compile(self):
+        paths = sorted((ROOT / "templates").glob("*.yaml"))
+        self.assertTrue(paths, "no templates found")
+        for path in paths:
+            with self.subTest(template=path.name):
+                template = agent_run.load_template(path)
+                for runtime in template["runtimes"]:
+                    agent_run.compile_exe_dev(template, runtime, "check")
+
+    def test_no_shipped_template_carries_a_credential(self):
+        # Values, not prose: a comment explaining that nothing secret is written
+        # is not a secret. Env names are checked separately from string values.
+        secret_name = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)", re.I)
+        secret_value = re.compile(r"(sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|[A-Za-z0-9+/]{40,}={0,2})")
+
+        def strings(node):
+            if isinstance(node, str):
+                yield node
+            elif isinstance(node, dict):
+                for value in node.values():
+                    yield from strings(value)
+            elif isinstance(node, list):
+                for item in node:
+                    yield from strings(item)
+
+        for path in sorted((ROOT / "templates").glob("*.yaml")):
+            template = yaml.safe_load(path.read_text())
+            with self.subTest(template=path.name):
+                for name in template.get("env", {}):
+                    self.assertIsNone(secret_name.search(name), f"env {name} looks like a credential")
+                for text in strings(template):
+                    self.assertIsNone(secret_value.search(text), f"value looks like a credential: {text[:40]}")

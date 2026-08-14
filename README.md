@@ -6,6 +6,8 @@
 
 ## Quick start
 
+New machine, or new to this workflow? [`docs/SETUP.md`](docs/SETUP.md) walks through git, GitHub, stacked PRs, and running agents on remote sandboxes.
+
 **Full setup** (shell + editor + AI tooling):
 
 ```bash

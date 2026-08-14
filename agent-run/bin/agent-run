@@ -150,7 +150,12 @@ def render_setup_script(template, runtime, exe_cfg):
     lines.append("")
 
     for step in template.get("setup", []):
-        if step == "update-runtimes":
+        if step == "configure-llm-integration":
+            # Point the runtime at the exe.dev gateway. The credential is
+            # injected at the network layer, so nothing secret is written here
+            # and no per-VM login is needed.
+            lines.append(f"exeuntu configure {RUNTIME_PACKAGES[runtime]}")
+        elif step == "update-runtimes":
             lines.append(f"sudo exeuntu update {RUNTIME_PACKAGES[runtime]}")
         elif step == "install-happy":
             lines.append("sudo npm install -g happy")

@@ -1,6 +1,10 @@
 version: 1
 name: lightdash-dev
-description: Lightdash development sandbox for the remote agent pilot.
+description: >
+  Lightdash development sandbox. Private repository, so this template needs a
+  repo-scoped GitHub integration named `github` to exist on the exe.dev account
+  first — create it interactively with `ssh exe.dev` then `int setup`. Without
+  it, cloning fails.
 
 resources:
   cpu: 4
@@ -19,18 +23,29 @@ env:
   NODE_ENV: development
 
 setup:
-  - update-runtimes
-  - install-happy
-  - run: corepack enable && pnpm install
+  # Reach the model through the exe.dev gateway: no login, no key on the VM.
+  - configure-llm-integration
+
+  # exeuntu ships git and the agent CLIs but no node, and Ubuntu 24.04's own
+  # nodejs is 18. Lightdash needs a current one, so install from NodeSource.
+  - run: |
+      curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+      sudo apt-get install -y nodejs
+      sudo corepack enable
+      corepack prepare pnpm@latest --activate
+
+  # The monorepo install is the slow part of readiness. Give dispatch a
+  # generous --wait-timeout for this template.
+  - run: pnpm install --frozen-lockfile
     cwd: lightdash
 
 checks:
+  - git --version
   - node --version
   - pnpm --version
-  - git --version
+  - tmux -V
 
 providers:
   exe.dev:
     image: exeuntu
     integrations: [github]
-    tags: [agent-pilot]
