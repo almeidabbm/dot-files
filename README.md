@@ -8,41 +8,36 @@
 
 New machine, or new to this workflow? [`docs/SETUP.md`](docs/SETUP.md) walks through git, GitHub, stacked PRs, and running agents on remote sandboxes.
 
-**Full setup** (shell + editor + AI tooling):
-
 ```bash
 git clone <repo-url> ~/Develop/dot-files
-~/Develop/dot-files/link.sh
+~/Develop/dot-files/link.sh          # everything
 ```
 
-**Claude Code only** (won't touch your shell or editor):
+Each piece installs on its own if you'd rather not touch your shell or editor:
 
-```bash
-git clone <repo-url> ~/Develop/dot-files
-~/Develop/dot-files/link-claude.sh
-```
+| Install | Remove | What it touches |
+| --- | --- | --- |
+| `link.sh` | `unlink.sh` | Everything below |
+| `link-claude.sh` | `unlink-claude.sh` | `~/.claude/` |
+| `link-codex.sh` | `unlink-codex.sh` | `~/.codex/` |
+| `link-opencode.sh` | `unlink-opencode.sh` | `~/.config/opencode/` |
+| `link-agent-memory.sh` | `unlink-agent-memory.sh` | `~/.local/bin/agent-memory` |
+| `link-agent-run.sh` | `unlink-agent-run.sh` | `~/.local/bin/agent-run` |
 
-**Codex only** (won't touch your shell or editor):
-
-```bash
-git clone <repo-url> ~/Develop/dot-files
-~/Develop/dot-files/link-codex.sh
-```
-
-> To undo, run `unlink.sh`, `unlink-claude.sh`, or `unlink-codex.sh` respectively.
+Check an install with `./doctor.sh` (read-only, exits non-zero on the first dangling link) or `./list-symlink.sh`.
 
 ---
 
-## How it works
+## The AI workflow layer
 
 ### One source, every agent
 
-The workflow content is written **once** under `.ai/` and projected into each tool's native location by the `link-*.sh` scripts. Editing `.ai/` updates every agent at once, because they all read through symlinks to the same files.
+Workflow content is written **once** under `.ai/` and projected into each tool's native location by the `link-*.sh` scripts. They all read through symlinks to the same files, so editing `.ai/` updates every agent at once.
 
 ```mermaid
 flowchart LR
     rules["shared-instructions.md<br/>(workflow rules)"]
-    skills[".ai/skills/<br/>(6 task skills)"]
+    skills[".ai/skills/<br/>(workflow procedures)"]
 
     subgraph links["link-*.sh — symlink"]
         lc["link-claude"]
@@ -58,9 +53,11 @@ flowchart LR
     lo --> opencode["OpenCode<br/>~/.config/opencode/AGENTS.md<br/>~/.config/opencode/skills/"]
 ```
 
+Claude surfaces the skills as slash commands (`/start-task`); Codex and OpenCode load them as skills of the same name. The content is identical everywhere.
+
 ### The task workflow
 
-The skills drive a small lifecycle on top of centralized task memory at `$AGENT_LOCAL_MEMORY_PATH`. Tasks are source-agnostic, can bind to more than one repository, and use `notes.md` frontmatter as the lifecycle source of truth.
+Work is organised as **tasks**, not branches. A task lives outside every checkout at `$AGENT_LOCAL_MEMORY_PATH`, can bind more than one repository, and carries its own status — the `status:` field in `notes.md` frontmatter is the source of truth for where it stands.
 
 ```mermaid
 flowchart TD
@@ -75,101 +72,37 @@ flowchart TD
     impl -.-> status
 ```
 
----
+The everyday loop: `/start-task` → design `spec.md` together → draft the plan in the tool's native plan mode → implement → `/pre-merge` when tests pass → submit → `/archive-task`.
 
-## What's inside
+### Skills
 
-### Claude Code
-
-Claude uses the shared workflow rules from [`.ai/shared-instructions.md`](.ai/shared-instructions.md), symlinked into Claude's native `~/.claude/CLAUDE.md` location by `link-claude.sh`.
-
-**Shared rules** cover:
-
-- Branch management with **GitHub native stacked PRs** (`gh stack`) — with plain-`git` fallbacks where stacking isn't available, and the stack kept rebased on current trunk
-- **Git worktrees** inside the repo (`.worktrees/`, gitignored) for parallel work
-- Auto-decomposition of features into **stacked PRs**
-- **Conventional commits** and **scoped testing** (only runs tests for changed files)
-- Central, multi-repository task memory at `$AGENT_LOCAL_MEMORY_PATH` — see "AI-Native Engineering Workflow" below
-
-**Shared repo workflow skills** live in [`.ai/skills/`](.ai/skills/) and are symlinked into Claude's native skills folder by `link-claude.sh`.
-
-**Skills:** Claude surfaces the shared workflow skills as slash commands — `/start-task`, `/status`, `/pre-merge`, `/archive-task`. See the [shared skills table](#shared-source).
-
-### Codex
-
-Codex uses the same shared workflow rules from [`.ai/shared-instructions.md`](.ai/shared-instructions.md), symlinked into Codex's native `~/.codex/AGENTS.md` location by `link-codex.sh`.
-
-**Shared repo workflow skills** live once in [`.ai/skills/`](.ai/skills/) and are symlinked into `~/.codex/skills/` by `link-codex.sh`. Codex loads the same workflows (see the [shared skills table](#shared-source)).
-
-### OpenCode
-
-OpenCode uses the same shared workflow rules from [`.ai/shared-instructions.md`](.ai/shared-instructions.md), symlinked into OpenCode's native `~/.config/opencode/AGENTS.md` location by `link-opencode.sh`.
-
-**Shared repo workflow skills** live once in [`.ai/skills/`](.ai/skills/) and are symlinked into `~/.config/opencode/skills/` by `link-opencode.sh`.
-
-### Shared Source
-
-The reusable workflow content is agent-agnostic and lives in:
-
-- [`.ai/shared-instructions.md`](.ai/shared-instructions.md) for durable global workflow rules
-- [`.ai/skills/`](.ai/skills/) for reusable task workflows
-- [`.ai/HARNESS.md`](.ai/HARNESS.md) for the machinery behind those rules — layer map, current-task resolution order, and recovery steps
-
-The shared skills (slash commands in Claude — `/start-task` etc.; skills of the same name in Codex and OpenCode):
-
-| Skill          | What it does                                                                                                       |
-| -------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `start-task`   | On-ramp for new work. Creates a central task with metadata and five working files, binds repositories, and ingests a ticket link from any tracker. |
-| `status`       | Read-only view of every active task with status, size, and next-step suggestion.                                  |
-| `pre-merge`    | Production-safety gate: adversarial review + hardening checklist against spec, plan, system-map, and the diff.     |
-| `archive-task` | Lifecycle close-out. Moves `active/<slug>/` → `archive/<slug>/`, optionally graduates docs to the repo.           |
-| `orchestrate`  | Coordinates a ticket, epic, or milestone across tracker state, tasks, repositories, branches, and pull requests. |
-
-The link scripts project those shared files into each tool's native structure:
-
-- Claude Code -> `~/.claude/CLAUDE.md` and `~/.claude/skills/`
-- Codex -> `~/.codex/AGENTS.md` and `~/.codex/skills/`
-- OpenCode -> `~/.config/opencode/AGENTS.md` and `~/.config/opencode/skills/`
-
-The shared rules and `.ai/skills/` are identical everywhere.
+| Skill | What it does |
+| --- | --- |
+| `start-task` | On-ramp for new work. Creates a central task with its working files, binds repositories, and ingests a ticket link from any tracker. |
+| `status` | Read-only view of every active task with status, size, and next-step suggestion. |
+| `pre-merge` | Production-safety gate: adversarial review plus a hardening checklist against spec, plan, system map, and the diff. |
+| `archive-task` | Lifecycle close-out. Moves `active/<slug>/` → `archive/<slug>/` and graduates durable knowledge into the repository. |
+| `orchestrate` | Coordinates a ticket, epic, or milestone across tracker state, tasks, repositories, branches, and pull requests. |
+| `minion-language` | Speaks Minionese. |
 
 ### Enforcement
 
-This layer instructs agents; it does not enforce against them, and it carries no branch policy of its own. Which branches may be written to belongs to each repository — its `AGENTS.md`/`CLAUDE.md`, its branch protection rules, its required reviews, its CI — where the policy covers every contributor rather than only the machines running these dotfiles. The shared rules cover how to work a stack, not what a repository permits.
+This layer instructs agents; it does not enforce against them, and it carries no branch policy of its own. Which branches may be written to belongs to each repository — its `AGENTS.md`/`CLAUDE.md`, branch protection, required reviews, CI — where the policy covers every contributor rather than only the machines running these dotfiles. The shared rules cover how to work a stack, not what a repository permits.
+
+### Going deeper
+
+| Read | For |
+| --- | --- |
+| [`.ai/shared-instructions.md`](.ai/shared-instructions.md) | The operating rules themselves, and what each task file is for |
+| [`.ai/HARNESS.md`](.ai/HARNESS.md) | The machinery behind them — layer map, memory root layout, current-task resolution order, recovery |
+| [`.ai/skills/`](.ai/skills/) | Each procedure in full |
+| [`agent-run/README.md`](agent-run/README.md) | Running coding agents on disposable remote sandboxes |
+| [`docs/SETUP.md`](docs/SETUP.md) | A machine from nothing: git, GitHub, stacked PRs, remote agents |
+| `agent-memory --help` | The CLI surface, including legacy-store migration |
 
 ---
 
-### AI-Native Engineering Workflow
-
-These shared skills plus the shared instructions file form a small, self-contained workflow layer on each tool's native primitives. In Claude, the user-facing surface is three commands (`/start-task`, `/pre-merge`, `/archive-task`) plus `/status`; in Codex, the same workflows are available as skills.
-
-**Per-task working memory** under `$AGENT_LOCAL_MEMORY_PATH/tasks/active/<task-id>/`:
-
-- `task.json` — stable task identity, tracker reference, and one or more repository bindings with optional roles
-- `spec.md` — the what and why (goal, scope, success criteria), agreed with the human before planning. When a ticket exists (Linear, GitHub Issues, or any tracker), the ticket owns the problem statement: the spec links to it, summarizes it once (with fetch date), and records only the delta — scope, success criteria, chosen approach.
-- `plan.md` — the how, drafted in the tool's native plan mode (Claude Plan Mode, Codex plan mode, OpenCode's plan agent) and saved here once approved
-- `notes.md` — front-matter (slug, ticket, size, status, last-updated) + running log
-- `review.md` — written by `/pre-merge`
-
-**Durable architectural intelligence** is namespaced by normalized repository identity under `$AGENT_LOCAL_MEMORY_PATH/repositories/` (prefixed filenames: `inv-`, `area-`, `danger-`, `pitfall-`). It grows as tasks archive without mixing knowledge between repositories.
-
-**Typical flow:**
-
-1. `/start-task` (slug + auto-detected size) →
-2. describe intent — design the spec together, then draft the plan in the tool's plan mode →
-3. `/pre-merge` when tests pass →
-4. submit + merge →
-5. `/archive-task` (auto-suggested when PR is merged).
-
-Set `AGENT_LOCAL_MEMORY_PATH` to override the default `${XDG_DATA_HOME:-$HOME/.local/share}/agent-memory`. `agent-memory root`, `agent-memory list`, and `agent-memory current` make resolution explicit. Legacy stores can be inventoried safely with `agent-memory migrate --source <repo>`, then migrated with `--apply`; migration is additive, verifies staged data before promotion, and never deletes its sources. Incomplete legacy tasks block by default and can only be imported with explicit `--materialize-missing` placeholders after reviewing the dry run.
-
-If a machine crash leaves `.migration.lock` behind, first confirm no migration
-process is running, then remove only that lock directory from the resolved
-memory root and rerun the same command. A normal failure cleans up its own lock.
-
----
-
-### Neovim
+## Neovim
 
 Simplified Neovim 0.11 config with [lazy.nvim](https://github.com/folke/lazy.nvim). Optimized for TypeScript/JavaScript web development.
 
@@ -187,43 +120,29 @@ Simplified Neovim 0.11 config with [lazy.nvim](https://github.com/folke/lazy.nvi
 
 Full keybindings in [`.config/nvim/KEYBINDINGS.md`](.config/nvim/KEYBINDINGS.md).
 
----
+## tmux
 
-### Shell
+Stock tmux with comfort settings only — every default key binding is left alone,
+so what you learn transfers to any machine, including the remote VMs `agent-run`
+uses. Mouse on, 50k lines of scrollback, Kanagawa status bar to match Neovim.
+
+Keys and a troubleshooting table in [`.config/tmux/CHEATSHEET.md`](.config/tmux/CHEATSHEET.md).
+
+## Shell
 
 Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/romkatv/powerlevel10k) prompt. Includes git and [asdf](https://asdf-vm.com/) plugins, [fzf](https://github.com/junegunn/fzf) integration, Go path setup, and bun completions.
 
----
-
-## Scripts
-
-| Script             | Purpose                                        |
-| ------------------ | ---------------------------------------------- |
-| `link.sh`          | Symlink everything into `$HOME`                |
-| `unlink.sh`        | Remove all symlinks managed by this repo       |
-| `link-claude.sh`   | Symlink only Claude Code config                |
-| `unlink-claude.sh` | Remove only Claude Code symlinks               |
-| `link-codex.sh`    | Symlink only Codex config                      |
-| `unlink-codex.sh`  | Remove only Codex symlinks                     |
-| `link-opencode.sh` | Symlink only OpenCode config                   |
-| `unlink-opencode.sh` | Remove only OpenCode symlinks                |
-| `link-agent-memory.sh` | Install the shared `agent-memory` command   |
-| `link-agent-run.sh` | Install the `agent-run` remote sandbox command |
-| `unlink-agent-run.sh` | Remove the `agent-run` symlink |
-| `unlink-agent-memory.sh` | Remove the shared command symlink         |
-| `list-symlink.sh`  | List all active symlinks pointing to this repo |
-| `doctor.sh`        | Read-only health check: verify expected symlinks resolve (exits non-zero on failure) |
-
 ## Prerequisites
 
-| Tool                                                          | Required for            |
-| ------------------------------------------------------------- | ----------------------- |
-| [Neovim](https://neovim.io/) >= 0.11                          | Editor config           |
-| [oh-my-zsh](https://ohmyz.sh/)                                | Shell config            |
-| [powerlevel10k](https://github.com/romkatv/powerlevel10k)     | Shell theme             |
-| [asdf](https://asdf-vm.com/)                                  | Version management      |
-| [fzf](https://github.com/junegunn/fzf)                        | Fuzzy finding           |
-| [GitHub CLI](https://cli.github.com/) + `gh stack`             | Shared workflow rules   |
-| [Python](https://www.python.org/) >= 3.10                       | Agent-memory runtime    |
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Claude integration      |
-| [Codex](https://developers.openai.com/codex/)                 | Codex integration       |
+| Tool | Required for |
+| --- | --- |
+| [Neovim](https://neovim.io/) >= 0.11 | Editor config |
+| [oh-my-zsh](https://ohmyz.sh/) | Shell config |
+| [powerlevel10k](https://github.com/romkatv/powerlevel10k) | Shell theme |
+| [asdf](https://asdf-vm.com/) | Version management |
+| [fzf](https://github.com/junegunn/fzf) | Fuzzy finding |
+| [tmux](https://github.com/tmux/tmux) | Terminal multiplexing, `agent-run monitor` |
+| [GitHub CLI](https://cli.github.com/) + `gh stack` | Shared workflow rules |
+| [Python](https://www.python.org/) >= 3.10 | `agent-memory` runtime |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Claude integration |
+| [Codex](https://developers.openai.com/codex/) | Codex integration |

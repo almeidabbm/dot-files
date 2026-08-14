@@ -61,6 +61,7 @@ echo ""
 
 echo "🐚 Shell & editor"
 check_link "$HOME/.config/nvim/init.lua" "/dot-files/.config/nvim/init.lua" "Neovim init"
+check_link "$HOME/.config/tmux/tmux.conf" "/dot-files/.config/tmux/tmux.conf" "tmux config"
 check_link "$HOME/.config/nvim/lua" "/dot-files/.config/nvim/lua" "Neovim lua config"
 check_link "$HOME/.zshrc" "/dot-files/.zshrc" "Zsh config"
 check_link "$HOME/.p10k.zsh" "/dot-files/.p10k.zsh" "Powerlevel10k theme"
