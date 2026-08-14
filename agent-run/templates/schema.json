@@ -68,6 +68,10 @@
               "primary",
               "secondary"
             ]
+          },
+          "private": {
+            "description": "Clone through the exe.dev GitHub integration gateway instead of the public URL.",
+            "type": "boolean"
           }
         }
       }

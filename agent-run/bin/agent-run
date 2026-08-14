@@ -125,11 +125,68 @@ def repo_parts(repo_id):
 
 
 def clone_url(repo, exe_cfg):
+    """Where to clone from.
+
+    A private repo goes through the GitHub integration's aggregate hostname,
+    which is `github.int.exe.xyz` whatever the integration is named — so this
+    follows the repo's declared intent rather than trying to recognise a name.
+    """
     host, owner, name = repo_parts(repo["id"])
-    integrations = exe_cfg.get("integrations", [])
-    if host == "github.com" and any("github" in i for i in integrations):
+    if repo.get("private"):
+        if host != "github.com":
+            raise TemplateError(f"{repo['id']}: private cloning is only implemented for github.com")
         return f"https://github.int.exe.xyz/{owner}/{name}.git"
     return f"https://{host}/{owner}/{name}.git"
+
+
+# Which model id proves an LLM integration can serve a runtime. An account can
+# attach several: one may hold a personal subscription for OpenAI while another
+# serves Anthropic from the managed gateway, so the right host differs per
+# runtime and cannot be assumed from the integration's name.
+LLM_MODEL_MARKER = {"codex": "gpt-", "claude": "claude"}
+
+
+def render_llm_discovery(runtime):
+    """Shell that finds the LLM integration serving this runtime and configures it.
+
+    `exeuntu configure <agent>` picks the integration named `llm`, which is only
+    correct while that one integration serves every provider. Asking reflection
+    which integrations are attached, then asking each one which models it serves,
+    is what keeps this honest when providers are split across integrations.
+    """
+    marker = LLM_MODEL_MARKER[runtime]
+    lines = [
+        "AGENT_LLM_HOST=",
+        "for cand in $(curl -sf https://reflection.int.exe.xyz/integrations "
+        "| jq -r '.integrations[] | select(.type==\"llm\") | .name'); do",
+        f"  if curl -sf --max-time 20 https://$cand.int.exe.xyz/v1/models "
+        f"| jq -e '[.data[].id] | any(startswith(\"{marker}\"))' >/dev/null 2>&1; then",
+        "    AGENT_LLM_HOST=$cand.int.exe.xyz; break",
+        "  fi",
+        "done",
+        f'test -n "$AGENT_LLM_HOST" || {{ echo "no attached LLM integration serves {marker}* for {runtime}" >&2; exit 1; }}',
+        'echo "using LLM integration host: $AGENT_LLM_HOST"',
+    ]
+    if runtime == "codex":
+        lines += [
+            'mkdir -p "$HOME"/.codex',
+            'cat > "$HOME"/.codex/config.toml <<TOML',
+            "model_provider = \"exe\"",
+            "",
+            "[model_providers.exe]",
+            "name = \"exe.dev gateway\"",
+            'base_url = "https://$AGENT_LLM_HOST/v1"',
+            "wire_api = \"responses\"",
+            "TOML",
+        ]
+    else:
+        lines += [
+            'mkdir -p "$HOME"/.claude',
+            'cat > "$HOME"/.claude/settings.json <<JSON',
+            '{"apiKeyHelper":"printf implicit","env":{"ANTHROPIC_BASE_URL":"https://$AGENT_LLM_HOST"}}',
+            "JSON",
+        ]
+    return lines
 
 
 def render_setup_script(template, runtime, exe_cfg):
@@ -151,10 +208,7 @@ def render_setup_script(template, runtime, exe_cfg):
 
     for step in template.get("setup", []):
         if step == "configure-llm-integration":
-            # Point the runtime at the exe.dev gateway. The credential is
-            # injected at the network layer, so nothing secret is written here
-            # and no per-VM login is needed.
-            lines.append(f"exeuntu configure {RUNTIME_PACKAGES[runtime]}")
+            lines.extend(render_llm_discovery(runtime))
         elif step == "update-runtimes":
             lines.append(f"sudo exeuntu update {RUNTIME_PACKAGES[runtime]}")
         elif step == "install-happy":

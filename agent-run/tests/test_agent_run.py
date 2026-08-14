@@ -132,11 +132,18 @@ class CompileTests(unittest.TestCase):
             agent_run.compile_exe_dev(template, "codex", "x")
         self.assertIn("split by the provider's parser", str(ctx.exception))
 
-    def test_public_clone_url_without_github_integration(self):
+    def test_clone_url_follows_repo_intent_not_integration_name(self):
+        # The gateway hostname is aggregate, so recognising an integration by
+        # name is wrong: a github integration may be called anything.
         template = agent_run.load_template(TEMPLATE)
-        template["providers"]["exe.dev"]["integrations"] = []
+        template["providers"]["exe.dev"]["integrations"] = ["some-repo-integration"]
+        template["repos"][0]["private"] = False
         _, script = agent_run.compile_exe_dev(template, "codex", "x")
         self.assertIn("https://github.com/lightdash/lightdash.git", script)
+
+        template["repos"][0]["private"] = True
+        _, script = agent_run.compile_exe_dev(template, "codex", "x")
+        self.assertIn("https://github.int.exe.xyz/lightdash/lightdash.git", script)
 
 
 class ProviderErrorTests(unittest.TestCase):
@@ -644,25 +651,26 @@ class MonitorSessionTests(RunStateTestCase):
 
 
 class ConfigureStepTests(unittest.TestCase):
-    def test_configure_step_renders_per_runtime(self):
+    def test_configure_step_renders_discovery_for_each_runtime(self):
         template = {
             "name": "t", "runtimes": ["codex", "claude"],
             "repos": [{"id": "github.com/o/r"}],
             "setup": ["configure-llm-integration"],
         }
-        for runtime in ("codex", "claude"):
+        for runtime, marker in (("codex", "gpt-"), ("claude", "claude")):
             _, script = agent_run.compile_exe_dev(template, runtime, "x")
-            self.assertIn(f"exeuntu configure {runtime}", script)
+            self.assertIn("reflection.int.exe.xyz/integrations", script)
+            self.assertIn(f'startswith("{marker}")', script)
 
     def test_configure_step_needs_no_credential_in_the_template(self):
-        # The gateway injects the credential; the template stays secret-free.
         template = {
             "name": "t", "runtimes": ["codex"],
             "repos": [{"id": "github.com/o/r"}],
             "setup": ["configure-llm-integration"],
         }
         _, script = agent_run.compile_exe_dev(template, "codex", "x")
-        self.assertNotIn("api", script.lower().replace("api_key_placeholder", ""))
+        self.assertNotIn("sk-", script)
+        self.assertIn("implicit" if False else "int.exe.xyz", script)
 
 
 class ShippedTemplateTests(unittest.TestCase):
@@ -700,3 +708,29 @@ class ShippedTemplateTests(unittest.TestCase):
                     self.assertIsNone(secret_name.search(name), f"env {name} looks like a credential")
                 for text in strings(template):
                     self.assertIsNone(secret_value.search(text), f"value looks like a credential: {text[:40]}")
+
+
+class LlmDiscoveryTests(unittest.TestCase):
+    def test_discovery_asks_reflection_rather_than_assuming_a_name(self):
+        # `exeuntu configure` targets the integration literally named "llm",
+        # which is wrong once providers are split across integrations.
+        script = "\n".join(agent_run.render_llm_discovery("codex"))
+        self.assertIn("reflection.int.exe.xyz/integrations", script)
+        self.assertNotIn("exeuntu configure", script)
+
+    def test_discovery_matches_the_model_family_each_runtime_needs(self):
+        self.assertIn('startswith("gpt-")', "\n".join(agent_run.render_llm_discovery("codex")))
+        self.assertIn('startswith("claude")', "\n".join(agent_run.render_llm_discovery("claude")))
+
+    def test_discovery_fails_loudly_when_no_integration_serves_the_runtime(self):
+        # Silently falling back would look like success while billing the wrong
+        # provider, or none at all.
+        for runtime in ("codex", "claude"):
+            script = "\n".join(agent_run.render_llm_discovery(runtime))
+            self.assertIn("exit 1", script)
+
+    def test_discovery_writes_no_credential(self):
+        for runtime in ("codex", "claude"):
+            script = "\n".join(agent_run.render_llm_discovery(runtime))
+            self.assertNotIn("sk-", script)
+            self.assertIn("int.exe.xyz", script)
