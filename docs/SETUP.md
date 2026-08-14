@@ -480,6 +480,10 @@ public.
 Start with `dot-files`. It is the smallest end-to-end path, so if something is wrong with
 your account, key, or integrations, it fails fast and cheaply.
 
+For a third repo, ask an agent for the `agent-run-template` skill rather than copying a
+template by hand — it works through the clone route, step placement, and readiness checks,
+then validates and compiles without creating a VM.
+
 ### 3. A run, start to finish
 
 ```bash
