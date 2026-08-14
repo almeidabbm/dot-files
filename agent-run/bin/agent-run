@@ -324,8 +324,34 @@ def vm_exec(vm, command, *, check=True):
     return sh(["ssh", *SSH_BATCH_OPTS, "exe.dev", "ssh", vm, command], check=check)
 
 
+# exe.dev refuses some creation flags outright when the SSH key is tag-scoped.
+# The raw message names the restriction but not the way out, and the way out is
+# not obvious: attach the integration account-wide instead, or use an unscoped key.
+TAG_SCOPE_HINTS = (
+    (
+        "cannot modify integrations",
+        "this SSH key is tag-scoped, so --integration cannot attach anything at creation.\n"
+        "  Either attach the integration to auto:all (or to the tag your VMs already carry)\n"
+        "  and drop `integrations:` from the template, or register an unscoped key:\n"
+        "    ssh-keygen -t ed25519 -C exe-dev -f ~/.ssh/id_exe\n"
+        "    cat ~/.ssh/id_exe.pub | ssh exe.dev ssh-key add    # no --tag = unscoped",
+    ),
+    (
+        "can only use --tag",
+        "this SSH key is scoped to a single tag, so `tags:` in the template cannot be used.\n"
+        "  Drop it, and attach integrations account-wide instead.",
+    ),
+)
+
+
 def create_vm(argv, script):
-    result = sh(argv, input_text=script)
+    try:
+        result = sh(argv, input_text=script)
+    except RunError as e:
+        for marker, hint in TAG_SCOPE_HINTS:
+            if marker in str(e):
+                raise RunError(f"{e}\n\n{hint}") from None
+        raise
     try:
         info = json.loads(result.stdout)
     except json.JSONDecodeError:

@@ -2,9 +2,10 @@ version: 1
 name: lightdash-dev
 description: >
   Lightdash development sandbox. Private repository, so this template needs a
-  GitHub integration named `lightdash-lightdash` on the exe.dev account. It is
-  attached at VM creation via `--integration`, because a tag-scoped SSH key
-  cannot set the tag the integration is attached to.
+  GitHub integration for lightdash/lightdash on the exe.dev account, attached
+  account-wide. A tag-scoped SSH key can neither set a tag nor pass
+  `--integration` at creation, so attachment has to happen on the account —
+  `auto:all`, or the tag every VM already carries.
 
 resources:
   cpu: 4
@@ -49,4 +50,5 @@ checks:
 providers:
   exe.dev:
     image: exeuntu
-    integrations: [lightdash-lightdash]
+    # No `integrations:` here on purpose: a tag-scoped key cannot attach one at
+    # creation. Attach it account-wide instead, and the VM inherits it.

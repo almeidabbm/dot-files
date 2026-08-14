@@ -767,3 +767,29 @@ class DispatchNextStepsTests(RunStateTestCase):
     def test_unconfigured_template_still_asks_for_a_login(self):
         out = self.dispatch_with([])
         self.assertIn("login", out)
+
+
+class TagScopedKeyHintTests(unittest.TestCase):
+    def test_integration_refusal_explains_both_ways_out(self):
+        fake = completed(returncode=1, stdout='{"error":"tag-scoped SSH keys cannot modify integrations"}')
+        with mock.patch.object(agent_run, "sh", side_effect=agent_run.RunError(fake.stdout)):
+            with self.assertRaises(agent_run.RunError) as ctx:
+                agent_run.create_vm(["ssh", "exe.dev", "new"], "script")
+        message = str(ctx.exception)
+        self.assertIn("auto:all", message)
+        self.assertIn("ssh-key add", message)
+
+    def test_tag_refusal_points_at_the_template_field(self):
+        with mock.patch.object(
+            agent_run, "sh",
+            side_effect=agent_run.RunError('{"error":"--tag SSH key scoped to tag \\"x\\" can only use --tag=x"}'),
+        ):
+            with self.assertRaises(agent_run.RunError) as ctx:
+                agent_run.create_vm(["ssh", "exe.dev", "new"], "script")
+        self.assertIn("tags:", str(ctx.exception))
+
+    def test_unrelated_errors_pass_through_unchanged(self):
+        with mock.patch.object(agent_run, "sh", side_effect=agent_run.RunError("quota exceeded")):
+            with self.assertRaises(agent_run.RunError) as ctx:
+                agent_run.create_vm(["ssh", "exe.dev", "new"], "script")
+        self.assertEqual(str(ctx.exception), "quota exceeded")

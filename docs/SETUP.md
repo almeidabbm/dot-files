@@ -340,7 +340,7 @@ You want integrations of two kinds:
 | Kind | Gives you | Attach as |
 | --- | --- | --- |
 | `llm` | Model access with no credential on the VM | `auto:all` |
-| `github` | Cloning private repos with no token on the VM | one per repo, then `--integration=<name>` at creation |
+| `github` | Cloning private repos with no token on the VM | `auto:all` while the key is tag-scoped |
 
 **Attachment matters more than it looks.** An exe.dev SSH key is scoped to a single tag,
 and yours is scoped to a tag named after the key type:
@@ -351,9 +351,31 @@ $ ssh exe.dev new --tag=my-tag ...
 ```
 
 Every VM the key creates is auto-tagged `ssh-ed25519`, and no other tag can be set — so an
-integration attached to any *other* tag can never reach your VMs. Attach LLM integrations
-to `auto:all` (or to `tag:ssh-ed25519`), and attach repo integrations per VM with
-`--integration=<name>`, which `agent-run` compiles from the template.
+integration attached to any *other* tag can never reach your VMs. Nor is per-VM attachment
+available:
+
+```console
+$ ssh exe.dev new --integration=lightdash-lightdash ...
+{"error":"tag-scoped SSH keys cannot modify integrations"}
+```
+
+So while the key is tag-scoped, **every** integration has to be attached on the account —
+`auto:all`, or `tag:ssh-ed25519` which every VM already carries — and templates must leave
+`integrations:` and `tags:` empty.
+
+That is a real cost: attaching a repo integration account-wide means every VM can reach
+that repo, and with `act-as-user` a push is attributed to your GitHub account. Per-VM
+scoping comes back with an unscoped key:
+
+```bash
+ssh-keygen -t ed25519 -C "exe-dev" -f ~/.ssh/id_exe
+cat ~/.ssh/id_exe.pub | ssh exe.dev ssh-key add     # no --tag = unscoped
+```
+
+Pipe the key rather than passing it as an argument. `ssh-key add [--tag=TAG] <public-key>`
+takes a tag flag, and because the gateway strips shell quoting, a quoted public key passed
+inline arrives split — which is how a key ends up scoped to a tag named `ssh-ed25519`, the
+first token of the key itself.
 
 **Do not assume the integration named `llm` is the right one.** An account can hold
 several: one may serve OpenAI from a personal ChatGPT subscription while another serves
