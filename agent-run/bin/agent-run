@@ -922,6 +922,34 @@ def cmd_stat(args):
         print("  (no metrics available)")
 
 
+# Killing the session means the runner never writes its own exit code, so stop
+# writes one. 130 is the conventional "terminated by SIGINT", which keeps
+# `status` honest: the run ended, and not of its own accord.
+STOPPED_EXIT_CODE = 130
+
+
+def cmd_stop(args):
+    """End the agent without touching the VM, so its work stays inspectable."""
+    record = load_run(args.name)
+    if record["status"] == "deleted":
+        raise RunError(f"run '{args.name}' is deleted; its VM is gone")
+
+    state = agent_state(record)
+    if state != "running":
+        print(f"{args.name}: no agent to stop (state: {state})")
+        return
+
+    session = record.get("tmux_session", TMUX_SESSION)
+    vm_exec(record["vm"], f"tmux kill-session -t {session}", check=False)
+    vm_exec(record["vm"], f"echo {STOPPED_EXIT_CODE} > {AGENT_EXIT_REMOTE}", check=False)
+    record["stopped_at"] = utc_now()
+    save_run(record)
+
+    print(f"{args.name}: agent stopped")
+    print(f"  its output survives:  agent-run logs {args.name}")
+    print(f"  the VM is still up:   agent-run shell {args.name}   (delete with 'agent-run rm {args.name}')")
+
+
 def cmd_shell(args):
     """An interactive shell on the VM, with no agent involved."""
     record = load_run(args.name)
@@ -1092,6 +1120,10 @@ def main():
     p = sub.add_parser("attach", help="attach to a run's tmux session to drive it directly")
     p.add_argument("name")
     p.set_defaults(func=cmd_attach)
+
+    p = sub.add_parser("stop", help="stop a run's agent, leaving the VM and its output intact")
+    p.add_argument("name")
+    p.set_defaults(func=cmd_stop)
 
     p = sub.add_parser("stat", help="show a run's agent progress and VM resource usage")
     p.add_argument("name")

@@ -470,7 +470,10 @@ agent-run status                     # every run: VM state and agent state
 agent-run logs my-task --follow      # stream this one
 agent-run attach my-task             # take the wheel; Ctrl-b d to leave it running
 
-# 4. clean up — always
+# 4. stop the agent but keep the VM and its output
+agent-run stop my-task
+
+# 5. clean up — always
 agent-run rm my-task
 ssh exe.dev ls --json                # confirm: {"vms":[]}
 ```

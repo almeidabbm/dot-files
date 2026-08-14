@@ -960,3 +960,56 @@ class ResourcesWindowTests(unittest.TestCase):
         self.assertIn("stat alpha", command)
         self.assertIn("stat beta", command)
         self.assertIn("while true", command)
+
+
+class StopTests(RunStateTestCase):
+    def seed(self, **extra):
+        record = {
+            "name": "task-a", "vm": "task-a", "ssh_dest": "u@vm", "provider": "exe.dev",
+            "template": "t.yaml", "runtime": "codex", "status": "ready",
+            "created_at": "2026-08-14T06:00:00Z", "started_at": "2026-08-14T06:01:00Z",
+        }
+        record.update(extra)
+        agent_run.save_run(record)
+
+    def test_stop_kills_the_session_and_records_an_exit_code(self):
+        # Killing tmux means the runner never writes one, and a run with no exit
+        # code reads as exited(?) — indistinguishable from a crash.
+        self.seed()
+        calls = []
+
+        def fake_sh(args, input_text=None, check=True):
+            calls.append(args[-1])
+            return completed(stdout="RUNNING\n")
+
+        with mock.patch.object(agent_run, "sh", fake_sh), mock.patch("builtins.print"):
+            agent_run.cmd_stop(argparse.Namespace(name="task-a"))
+
+        self.assertTrue(any("tmux kill-session -t agent" in c for c in calls))
+        self.assertTrue(any(str(agent_run.STOPPED_EXIT_CODE) in c and "agent-run-exit" in c for c in calls))
+        record = json.loads(agent_run.run_record_path("task-a").read_text())
+        self.assertTrue(record["stopped_at"])
+
+    def test_stop_leaves_the_vm_alone(self):
+        self.seed()
+        calls = []
+
+        def fake_sh(args, input_text=None, check=True):
+            calls.append(" ".join(args))
+            return completed(stdout="RUNNING\n")
+
+        with mock.patch.object(agent_run, "sh", fake_sh), mock.patch("builtins.print"):
+            agent_run.cmd_stop(argparse.Namespace(name="task-a"))
+        self.assertFalse(any(" rm " in c for c in calls), "stop must not delete the VM")
+
+    def test_stopping_an_idle_run_is_not_an_error(self):
+        self.seed()
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(stdout="DONE:0\n")):
+            with mock.patch("builtins.print") as fake_print:
+                agent_run.cmd_stop(argparse.Namespace(name="task-a"))
+        self.assertIn("no agent to stop", " ".join(str(c.args[0]) for c in fake_print.call_args_list if c.args))
+
+    def test_stop_refuses_a_deleted_run(self):
+        self.seed(status="deleted")
+        with self.assertRaises(agent_run.RunError):
+            agent_run.cmd_stop(argparse.Namespace(name="task-a"))

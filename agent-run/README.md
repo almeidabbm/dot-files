@@ -249,6 +249,14 @@ Four questions, four commands:
 | How is it going, and what is it costing? | `agent-run stat <name> [--json]` |
 | Show me everything at once | `agent-run monitor` |
 
+To end a run without losing it, `agent-run stop <name>` kills the agent and leaves
+the VM and its output in place — the work stays inspectable with `logs`, `shell`,
+or another `run`. `agent-run rm <name>` is the one that destroys the VM.
+
+Because killing the session means the runner never writes its own exit code, `stop`
+writes 130 — terminated by SIGINT — so `status` shows the run ended and did not end
+by itself.
+
 `stat` reports agent state, elapsed time, tokens the runtime has reported using,
 and a resource sample — cpu, **memory**, disk, network, io. Memory leads because
 exe.dev's own `stat` table omits it, and memory is what actually kills a build on
