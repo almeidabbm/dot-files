@@ -273,6 +273,7 @@ Each of these is a fact about exe.dev that the tool is shaped around.
 
 | Fact                                                                                              | Consequence                                                                                                                |
 | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Interactive sessions (`attach`, `shell`) connect directly to the VM, because the gateway allocates no TTY — even `ssh -tt exe.dev ssh <vm> tty` reports "not a tty" | Command execution stays on the gateway, where a direct call carrying a command can land in the exe.dev REPL |
 | The gateway strips shell quoting from `ssh exe.dev ssh <vm> '<cmd>'`; quoted multi-word arguments arrive split | File content and scripts travel base64-encoded in a single whitespace-free token (`push_file`), and every remote command the tool sends is quote-free |
 | The gateway does not forward stdin to the VM                                                      | Nothing can be piped into a remote command; content must ride in the command line, base64-encoded                          |
 | The same no-quoting rule applies to `ssh exe.dev new` arguments                                   | `compile` rejects any argument containing whitespace, so a template `env` value like `hello world` fails at compile time     |

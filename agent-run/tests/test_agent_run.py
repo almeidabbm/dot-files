@@ -48,7 +48,7 @@ def logs_args(name, **overrides):
 
 
 def run_args(name, **overrides):
-    defaults = dict(name=name, prompt_file=None, sandbox="workspace-write", force=False)
+    defaults = dict(name=name, prompt_file=None, sandbox="workspace-write", force=False, interactive=False)
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
 
@@ -522,11 +522,18 @@ class ObserveTests(RunStateTestCase):
                 agent_run.cmd_attach(argparse.Namespace(name="task-a"))
         self.assertIn("no live agent", str(ctx.exception))
 
-    def test_attach_and_follow_route_through_the_gateway(self):
+    def test_attach_goes_direct_because_the_gateway_gives_no_tty(self):
+        # `ssh -tt exe.dev ssh <vm> tty` reports "not a tty", so tmux through the
+        # gateway fails with "open terminal failed: not a terminal".
         self.assertEqual(
-            agent_run.attach_argv("task-a"),
-            ["ssh", "-t", "exe.dev", "ssh", "task-a", "tmux", "attach", "-t", "agent"],
+            agent_run.attach_argv("task-a.exe.xyz"),
+            ["ssh", "-t", "-o", "StrictHostKeyChecking=accept-new",
+             "task-a.exe.xyz", "tmux", "attach", "-t", "agent"],
         )
+
+    def test_follow_stays_on_the_gateway(self):
+        # Streaming needs no TTY, and a direct call with a command can land in
+        # the exe.dev REPL.
         self.assertEqual(
             agent_run.follow_argv("task-a", "~/work/agent.log"),
             ["ssh", "exe.dev", "ssh", "task-a", "tail", "-n", "200", "-f", "~/work/agent.log"],
@@ -835,3 +842,65 @@ class PromptRequiredTests(RunStateTestCase):
         script = agent_run.render_runner("codex", "workspace-write", "~/work/repo")
         self.assertIn("no task prompt", script)
         self.assertIn("exit 2", script)
+
+
+class InteractiveAndShellTests(RunStateTestCase):
+    def seed(self, **extra):
+        record = {
+            "name": "task-a", "vm": "task-a", "ssh_dest": "u@vm", "provider": "exe.dev",
+            "template": "t.yaml", "runtime": "codex", "status": "ready",
+            "created_at": "2026-08-14T06:00:00Z", "workdir": "~/work/repo",
+        }
+        record.update(extra)
+        agent_run.save_run(record)
+
+    def test_interactive_needs_no_prompt(self):
+        self.seed()
+        calls = []
+
+        def fake_sh(args, input_text=None, check=True):
+            calls.append(args[-1])
+            return completed(stdout="DONE:0\n")
+
+        with mock.patch.object(agent_run, "sh", fake_sh):
+            agent_run.cmd_run(run_args("task-a", interactive=True))
+        self.assertFalse(any("test -s" in c for c in calls), "must not demand a prompt")
+        self.assertTrue(any("tmux new-session" in c for c in calls))
+
+    def test_interactive_rejects_a_prompt_file(self):
+        self.seed()
+        with self.assertRaises(agent_run.RunError) as ctx:
+            agent_run.cmd_run(run_args("task-a", interactive=True, prompt_file="/tmp/x.md"))
+        self.assertIn("--interactive", str(ctx.exception))
+
+    def test_interactive_runner_reads_no_prompt_and_captures_no_log(self):
+        script = agent_run.render_runner("codex", "workspace-write", "~/work/repo", interactive=True)
+        self.assertNotIn("TASK.md", script)
+        self.assertNotIn("tee", script)          # a TUI through tee is unreadable
+        self.assertIn("codex --sandbox workspace-write", script)
+        self.assertIn(agent_run.shell_path(agent_run.AGENT_EXIT_REMOTE), script)
+
+    def test_interactive_runner_maps_sandbox_for_claude_too(self):
+        script = agent_run.render_runner("claude", "danger-full-access", "~/work/repo", interactive=True)
+        self.assertIn("claude --permission-mode bypassPermissions", script)
+
+    def test_shell_targets_the_vm_directly_with_a_tty(self):
+        argv = agent_run.shell_argv("task-a.exe.xyz")
+        self.assertEqual(argv[0], "ssh")
+        self.assertIn("-t", argv)
+        self.assertEqual(argv[-1], "task-a.exe.xyz")
+        self.assertNotIn("exe.dev", argv)  # the gateway cannot give a TTY
+
+    def test_shell_refuses_a_deleted_run(self):
+        self.seed(status="deleted")
+        with self.assertRaises(agent_run.RunError):
+            agent_run.cmd_shell(argparse.Namespace(name="task-a"))
+
+    def test_attach_failure_names_the_alternatives(self):
+        self.seed(started_at="2026-08-14T06:01:00Z")
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(stdout="DONE:0\n")):
+            with self.assertRaises(agent_run.RunError) as ctx:
+                agent_run.cmd_attach(argparse.Namespace(name="task-a"))
+        message = str(ctx.exception)
+        self.assertIn("--interactive", message)
+        self.assertIn("agent-run shell", message)
