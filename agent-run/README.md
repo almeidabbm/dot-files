@@ -238,6 +238,58 @@ the chosen runtime and configures it, so no credential is written to the VM and
 no login happens. A template without that step leaves the runtime unauthenticated,
 and `dispatch` then prints the manual login to run before `agent-run run`.
 
+## Three ways to start work
+
+| You want | Command |
+| --- | --- |
+| Run a task and walk away | `agent-run run <name> --prompt-file <file>` |
+| Drive the runtime by hand | `agent-run run <name> --interactive`, then `attach` |
+| Just a shell on the box | `agent-run shell <name>` |
+
+`--prompt-file` is required the first time. It becomes optional afterwards, because
+a run leaves its prompt at `~/work/TASK.md` and a repeat run reuses it — which is the
+whole point of the flag being optional. Starting with neither a prompt nor
+`--interactive` is refused: the runtime would read an empty task, answer a question
+nobody asked, and exit 0.
+
+`--interactive` starts the runtime's own UI instead of a one-shot task. It reads no
+prompt and captures no log, so `logs` has nothing to show for it — the tmux session
+is the record. It takes the same `--sandbox`, mapped per runtime.
+
+`shell` involves no agent at all: an interactive shell on the VM, for reading the
+checkout, running tests yourself, or finishing a manual login.
+
+## Watching a run
+
+Four questions, four commands:
+
+| Question | Command |
+| --- | --- |
+| What is running, and is it alive? | `agent-run status [--json]` |
+| What is it doing right now? | `agent-run logs <name> --follow` |
+| How is it going, and what is it costing? | `agent-run stat <name> [--json]` |
+| Show me everything at once | `agent-run monitor` |
+
+To end a run without losing it, `agent-run stop <name>` kills the agent and leaves
+the VM and its output in place — the work stays inspectable with `logs`, `shell`,
+or another `run`. `agent-run rm <name>` is the one that destroys the VM.
+
+Because killing the session means the runner never writes its own exit code, `stop`
+writes 130 — terminated by SIGINT — so `status` shows the run ended and did not end
+by itself.
+
+`stat` reports agent state, elapsed time, tokens the runtime has reported using,
+and a resource sample — cpu, **memory**, disk, network, io. Memory leads because
+exe.dev's own `stat` table omits it, and memory is what actually kills a build on
+an 8GB box; it is flagged at 90% and above.
+
+`monitor` builds a tmux session with one window per run plus a `resources.`
+window looping `stat` over all of them. The trailing dot keeps that name outside
+the space of valid run names, so it cannot be shadowed or pruned.
+
+Tokens come from the runtime's own output, so they are available in task mode and
+not in `--interactive`, which captures no log by design.
+
 ## Choosing a sandbox
 
 `agent-run run --sandbox` is the one call the operator makes consciously. Each
@@ -273,6 +325,7 @@ Each of these is a fact about exe.dev that the tool is shaped around.
 
 | Fact                                                                                              | Consequence                                                                                                                |
 | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Interactive sessions (`attach`, `shell`) connect directly to the VM, because the gateway allocates no TTY — even `ssh -tt exe.dev ssh <vm> tty` reports "not a tty" | Command execution stays on the gateway, where a direct call carrying a command can land in the exe.dev REPL |
 | The gateway strips shell quoting from `ssh exe.dev ssh <vm> '<cmd>'`; quoted multi-word arguments arrive split | File content and scripts travel base64-encoded in a single whitespace-free token (`push_file`), and every remote command the tool sends is quote-free |
 | The gateway does not forward stdin to the VM                                                      | Nothing can be piped into a remote command; content must ride in the command line, base64-encoded                          |
 | The same no-quoting rule applies to `ssh exe.dev new` arguments                                   | `compile` rejects any argument containing whitespace, so a template `env` value like `hello world` fails at compile time     |

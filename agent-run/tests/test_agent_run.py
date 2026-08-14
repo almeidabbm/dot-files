@@ -48,7 +48,7 @@ def logs_args(name, **overrides):
 
 
 def run_args(name, **overrides):
-    defaults = dict(name=name, prompt_file=None, sandbox="workspace-write", force=False)
+    defaults = dict(name=name, prompt_file=None, sandbox="workspace-write", force=False, interactive=False)
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
 
@@ -416,7 +416,8 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("--sandbox danger-full-access", script)
         self.assertIn('cd "$WORKDIR"', script)
         # tmux's session lifetime is the agent's, so the runner must not background.
-        self.assertNotIn("&", script.replace("2>&1", "").replace("&&", ""))
+        for line in script.splitlines():
+            self.assertFalse(line.rstrip().endswith("&"), f"backgrounded: {line}")
         self.assertIn("rc=${PIPESTATUS[0]}", script)
         self.assertIn(agent_run.shell_path(agent_run.AGENT_EXIT_REMOTE), script)
 
@@ -488,6 +489,8 @@ class ObserveTests(RunStateTestCase):
 
         def fake_sh(args, input_text=None, check=True):
             calls.append(args[-1])
+            if "test -s" in args[-1]:
+                return completed(stdout="PRESENT\n")
             return completed(stdout="DONE:0\n")
 
         with mock.patch.object(agent_run, "sh", fake_sh):
@@ -519,11 +522,18 @@ class ObserveTests(RunStateTestCase):
                 agent_run.cmd_attach(argparse.Namespace(name="task-a"))
         self.assertIn("no live agent", str(ctx.exception))
 
-    def test_attach_and_follow_route_through_the_gateway(self):
+    def test_attach_goes_direct_because_the_gateway_gives_no_tty(self):
+        # `ssh -tt exe.dev ssh <vm> tty` reports "not a tty", so tmux through the
+        # gateway fails with "open terminal failed: not a terminal".
         self.assertEqual(
-            agent_run.attach_argv("task-a"),
-            ["ssh", "-t", "exe.dev", "ssh", "task-a", "tmux", "attach", "-t", "agent"],
+            agent_run.attach_argv("task-a.exe.xyz"),
+            ["ssh", "-t", "-o", "StrictHostKeyChecking=accept-new",
+             "task-a.exe.xyz", "tmux", "attach", "-t", "agent"],
         )
+
+    def test_follow_stays_on_the_gateway(self):
+        # Streaming needs no TTY, and a direct call with a command can land in
+        # the exe.dev REPL.
         self.assertEqual(
             agent_run.follow_argv("task-a", "~/work/agent.log"),
             ["ssh", "exe.dev", "ssh", "task-a", "tail", "-n", "200", "-f", "~/work/agent.log"],
@@ -793,3 +803,213 @@ class TagScopedKeyHintTests(unittest.TestCase):
             with self.assertRaises(agent_run.RunError) as ctx:
                 agent_run.create_vm(["ssh", "exe.dev", "new"], "script")
         self.assertEqual(str(ctx.exception), "quota exceeded")
+
+
+class PromptRequiredTests(RunStateTestCase):
+    def seed(self, **extra):
+        record = {
+            "name": "task-a", "vm": "task-a", "ssh_dest": "u@vm", "provider": "exe.dev",
+            "template": "t.yaml", "runtime": "codex", "status": "ready",
+            "created_at": "2026-08-14T06:00:00Z", "workdir": "~/work/repo",
+        }
+        record.update(extra)
+        agent_run.save_run(record)
+
+    def test_run_without_a_prompt_refuses_when_the_vm_has_none(self):
+        # Otherwise the runtime answers "what would you like me to work on?"
+        # and exits 0 — a no-op that looks like success.
+        self.seed()
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(stdout="")):
+            with self.assertRaises(agent_run.RunError) as ctx:
+                agent_run.cmd_run(run_args("task-a"))
+        self.assertIn("--prompt-file", str(ctx.exception))
+
+    def test_run_without_a_prompt_proceeds_when_an_earlier_run_left_one(self):
+        self.seed()
+        calls = []
+
+        def fake_sh(args, input_text=None, check=True):
+            calls.append(args[-1])
+            if "test -s" in args[-1]:
+                return completed(stdout="PRESENT\n")
+            return completed(stdout="DONE:0\n")
+
+        with mock.patch.object(agent_run, "sh", fake_sh):
+            agent_run.cmd_run(run_args("task-a"))
+        self.assertTrue(any("tmux new-session" in c for c in calls))
+
+    def test_runner_refuses_an_empty_prompt_with_a_nonzero_exit(self):
+        script = agent_run.render_runner("codex", "workspace-write", "~/work/repo")
+        self.assertIn("no task prompt", script)
+        self.assertIn("exit 2", script)
+
+
+class InteractiveAndShellTests(RunStateTestCase):
+    def seed(self, **extra):
+        record = {
+            "name": "task-a", "vm": "task-a", "ssh_dest": "u@vm", "provider": "exe.dev",
+            "template": "t.yaml", "runtime": "codex", "status": "ready",
+            "created_at": "2026-08-14T06:00:00Z", "workdir": "~/work/repo",
+        }
+        record.update(extra)
+        agent_run.save_run(record)
+
+    def test_interactive_needs_no_prompt(self):
+        self.seed()
+        calls = []
+
+        def fake_sh(args, input_text=None, check=True):
+            calls.append(args[-1])
+            return completed(stdout="DONE:0\n")
+
+        with mock.patch.object(agent_run, "sh", fake_sh):
+            agent_run.cmd_run(run_args("task-a", interactive=True))
+        self.assertFalse(any("test -s" in c for c in calls), "must not demand a prompt")
+        self.assertTrue(any("tmux new-session" in c for c in calls))
+
+    def test_interactive_rejects_a_prompt_file(self):
+        self.seed()
+        with self.assertRaises(agent_run.RunError) as ctx:
+            agent_run.cmd_run(run_args("task-a", interactive=True, prompt_file="/tmp/x.md"))
+        self.assertIn("--interactive", str(ctx.exception))
+
+    def test_interactive_runner_reads_no_prompt_and_captures_no_log(self):
+        script = agent_run.render_runner("codex", "workspace-write", "~/work/repo", interactive=True)
+        self.assertNotIn("TASK.md", script)
+        self.assertNotIn("tee", script)          # a TUI through tee is unreadable
+        self.assertIn("codex --sandbox workspace-write", script)
+        self.assertIn(agent_run.shell_path(agent_run.AGENT_EXIT_REMOTE), script)
+
+    def test_interactive_runner_maps_sandbox_for_claude_too(self):
+        script = agent_run.render_runner("claude", "danger-full-access", "~/work/repo", interactive=True)
+        self.assertIn("claude --permission-mode bypassPermissions", script)
+
+    def test_shell_targets_the_vm_directly_with_a_tty(self):
+        argv = agent_run.shell_argv("task-a.exe.xyz")
+        self.assertEqual(argv[0], "ssh")
+        self.assertIn("-t", argv)
+        self.assertEqual(argv[-1], "task-a.exe.xyz")
+        self.assertNotIn("exe.dev", argv)  # the gateway cannot give a TTY
+
+    def test_shell_refuses_a_deleted_run(self):
+        self.seed(status="deleted")
+        with self.assertRaises(agent_run.RunError):
+            agent_run.cmd_shell(argparse.Namespace(name="task-a"))
+
+    def test_attach_failure_names_the_alternatives(self):
+        self.seed(started_at="2026-08-14T06:01:00Z")
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(stdout="DONE:0\n")):
+            with self.assertRaises(agent_run.RunError) as ctx:
+                agent_run.cmd_attach(argparse.Namespace(name="task-a"))
+        message = str(ctx.exception)
+        self.assertIn("--interactive", message)
+        self.assertIn("agent-run shell", message)
+
+
+class StatTests(RunStateTestCase):
+    def test_format_leads_with_memory_and_flags_pressure(self):
+        # exe.dev's own stat table omits memory, and memory is what kills a
+        # build on an 8GB box.
+        lines = "\n".join(agent_run.format_stat({
+            "cpu_cores": 2.0, "cpu_nominal": 4,
+            "mem_used_bytes": 8_350_076_928, "mem_total_bytes": 8_589_934_592,
+            "fs_used_gb": 5.5, "fs_total_gb": 53.7,
+        }))
+        self.assertIn("memory", lines)
+        self.assertIn("tight", lines)
+        self.assertIn("cpu", lines)
+
+    def test_no_pressure_flag_when_memory_is_comfortable(self):
+        lines = "\n".join(agent_run.format_stat({
+            "mem_used_bytes": 2_000_000_000, "mem_total_bytes": 8_589_934_592,
+        }))
+        self.assertNotIn("tight", lines)
+
+    def test_latest_sample_wins_regardless_of_order(self):
+        payload = json.dumps({"points": [
+            {"timestamp": "2026-08-14T12:10:26Z", "cpu_cores": 3},
+            {"timestamp": "2026-08-14T06:28:35Z", "cpu_cores": 1},
+        ]})
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(stdout=payload)):
+            self.assertEqual(agent_run.latest_stat("vm")["cpu_cores"], 3)
+
+    def test_unreadable_metrics_are_not_faked(self):
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(returncode=1)):
+            self.assertIsNone(agent_run.latest_stat("vm"))
+
+    def test_tokens_read_the_last_total_the_runtime_printed(self):
+        log = "tokens used\n9,031\nmore work\ntokens used\n36,756\n"
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(stdout=log)):
+            self.assertEqual(agent_run.agent_tokens({"vm": "v", "agent_log": "~/x"}), 36756)
+
+
+class ResourcesWindowTests(unittest.TestCase):
+    def test_resources_window_survives_a_refresh(self):
+        # It is not a run, so a naive prune would close it every time.
+        add, kill = agent_run.plan_monitor_windows(
+            ["a", agent_run.RESOURCES_WINDOW], ["a", agent_run.RESOURCES_WINDOW]
+        )
+        self.assertEqual((add, kill), ([], []))
+
+    def test_resources_window_name_cannot_collide_with_a_run(self):
+        # Run names come from --name, which the schema restricts to [a-z0-9-].
+        self.assertIn(".", agent_run.RESOURCES_WINDOW)
+
+    def test_resources_command_loops_over_every_run(self):
+        command = agent_run.resources_cmd(["alpha", "beta"])
+        self.assertIn("stat alpha", command)
+        self.assertIn("stat beta", command)
+        self.assertIn("while true", command)
+
+
+class StopTests(RunStateTestCase):
+    def seed(self, **extra):
+        record = {
+            "name": "task-a", "vm": "task-a", "ssh_dest": "u@vm", "provider": "exe.dev",
+            "template": "t.yaml", "runtime": "codex", "status": "ready",
+            "created_at": "2026-08-14T06:00:00Z", "started_at": "2026-08-14T06:01:00Z",
+        }
+        record.update(extra)
+        agent_run.save_run(record)
+
+    def test_stop_kills_the_session_and_records_an_exit_code(self):
+        # Killing tmux means the runner never writes one, and a run with no exit
+        # code reads as exited(?) — indistinguishable from a crash.
+        self.seed()
+        calls = []
+
+        def fake_sh(args, input_text=None, check=True):
+            calls.append(args[-1])
+            return completed(stdout="RUNNING\n")
+
+        with mock.patch.object(agent_run, "sh", fake_sh), mock.patch("builtins.print"):
+            agent_run.cmd_stop(argparse.Namespace(name="task-a"))
+
+        self.assertTrue(any("tmux kill-session -t agent" in c for c in calls))
+        self.assertTrue(any(str(agent_run.STOPPED_EXIT_CODE) in c and "agent-run-exit" in c for c in calls))
+        record = json.loads(agent_run.run_record_path("task-a").read_text())
+        self.assertTrue(record["stopped_at"])
+
+    def test_stop_leaves_the_vm_alone(self):
+        self.seed()
+        calls = []
+
+        def fake_sh(args, input_text=None, check=True):
+            calls.append(" ".join(args))
+            return completed(stdout="RUNNING\n")
+
+        with mock.patch.object(agent_run, "sh", fake_sh), mock.patch("builtins.print"):
+            agent_run.cmd_stop(argparse.Namespace(name="task-a"))
+        self.assertFalse(any(" rm " in c for c in calls), "stop must not delete the VM")
+
+    def test_stopping_an_idle_run_is_not_an_error(self):
+        self.seed()
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(stdout="DONE:0\n")):
+            with mock.patch("builtins.print") as fake_print:
+                agent_run.cmd_stop(argparse.Namespace(name="task-a"))
+        self.assertIn("no agent to stop", " ".join(str(c.args[0]) for c in fake_print.call_args_list if c.args))
+
+    def test_stop_refuses_a_deleted_run(self):
+        self.seed(status="deleted")
+        with self.assertRaises(agent_run.RunError):
+            agent_run.cmd_stop(argparse.Namespace(name="task-a"))

@@ -467,10 +467,14 @@ agent-run run my-task --prompt-file ./TASK.md
 
 # 3. watch
 agent-run status                     # every run: VM state and agent state
+agent-run stat my-task               # progress, tokens, cpu/memory/disk
 agent-run logs my-task --follow      # stream this one
 agent-run attach my-task             # take the wheel; Ctrl-b d to leave it running
 
-# 4. clean up — always
+# 4. stop the agent but keep the VM and its output
+agent-run stop my-task
+
+# 5. clean up — always
 agent-run rm my-task
 ssh exe.dev ls --json                # confirm: {"vms":[]}
 ```
@@ -484,6 +488,25 @@ For lightdash, allow for the monorepo install:
 agent-run dispatch agent-run/templates/lightdash-dev.yaml \
   --runtime codex --name ld-bug --wait-timeout 1800
 ```
+
+### 3a. Driving one by hand
+
+Not every session is a fire-and-forget task. To sit at the runtime yourself:
+
+```bash
+agent-run run my-task --interactive --sandbox danger-full-access
+agent-run attach my-task          # Ctrl-b d leaves it running
+```
+
+Or skip the agent entirely and get a shell on the VM:
+
+```bash
+agent-run shell my-task
+```
+
+Both connect straight to the VM rather than through the exe.dev gateway, because the
+gateway allocates no TTY — `ssh -tt exe.dev ssh <vm> tty` reports `not a tty`, which is
+why tmux fails with "open terminal failed" if you route an interactive session through it.
 
 ### 4. Watching several at once
 
