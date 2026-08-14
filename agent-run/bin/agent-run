@@ -1,0 +1,928 @@
+#!/usr/bin/env python3
+"""Compile provider-neutral sandbox templates into provider lifecycle calls.
+
+A template (agent-run/templates/*.yaml) describes what an environment needs:
+resources, repositories, allowed runtimes, env, setup steps, and readiness
+checks. A provider adapter compiles it into concrete calls.
+
+`validate` and `compile` never touch a provider. `dispatch`, `status`, and
+`rm` do: dispatch creates a VM from a compiled template and waits for its
+readiness marker, status reports on dispatched runs, and rm deletes a run's
+VM after confirmation. Run records are machine-local state under
+`~/.local/state/agent-run` (override with AGENT_RUN_STATE_PATH).
+"""
+
+import argparse
+import base64
+import datetime
+import json
+import os
+import pathlib
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+
+import jsonschema
+import yaml
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+SCHEMA_PATH = ROOT / "templates" / "schema.json"
+
+# Subscription-only pilot: provider API keys must never reach a sandbox.
+FORBIDDEN_ENV = {"OPENAI_API_KEY", "ANTHROPIC_API_KEY"}
+
+# exe.dev rejects setup scripts larger than 10KiB.
+SETUP_SCRIPT_LIMIT = 10 * 1024
+
+WORKDIR = '"$HOME"/work'
+READY_MARKER = f"{WORKDIR}/.agent-run-ready"
+READY_MARKER_REMOTE = "~/work/.agent-run-ready"
+# The setup script writes the marker with `date -u +%FT%TZ`; anything else came
+# from a failed read, not from a finished setup.
+READY_MARKER_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+# Where an agent lives on its VM. One session per VM: a VM runs one task.
+TMUX_SESSION = "agent"
+AGENT_LOG_REMOTE = "~/work/agent.log"
+AGENT_EXIT_REMOTE = "~/work/.agent-run-exit"
+RUNNER_REMOTE = "~/.agent-run/runner.sh"
+PROMPT_REMOTE = "~/work/TASK.md"
+
+# `workspace-write` is the default because it is the least privilege that still
+# lets an agent edit the checkout. It also makes `.git` read-only, so the agent
+# cannot create branches or commit (openai/codex#15505, #14338) — pass
+# `--sandbox danger-full-access` when the run needs git and the VM is accepted
+# as the only isolation boundary.
+SANDBOX_MODES = ("read-only", "workspace-write", "danger-full-access")
+DEFAULT_SANDBOX = "workspace-write"
+
+RUNTIME_PACKAGES = {"codex": "codex", "claude": "claude"}
+
+SSH_BATCH_OPTS = [
+    "-o", "BatchMode=yes",
+    "-o", "StrictHostKeyChecking=accept-new",
+    "-o", "ConnectTimeout=10",
+]
+
+# exe.dev's first-boot setup script logs to the journal under this tag.
+SETUP_LOG_CMD = "sudo journalctl -t exe-setup --no-pager"
+
+# Printed after dispatch when a template has no `configure-llm-integration`
+# step: without it, nothing has pointed the runtime at an integration, so a
+# human has to authenticate it on the VM before `agent-run run` will work.
+MANUAL_AUTH_HINTS = {
+    "codex": "codex login --device-auth   # then: codex login status",
+    "claude": "claude                      # choose the subscription login, complete the SSH flow",
+}
+
+
+class TemplateError(Exception):
+    pass
+
+
+class RunError(Exception):
+    pass
+
+
+def sh(args, *, input_text=None, check=True):
+    """Single subprocess seam so tests can fake provider calls."""
+    result = subprocess.run(args, input=input_text, text=True, capture_output=True)
+    if check and result.returncode != 0:
+        # exe.dev reports errors on stdout (as JSON), so include both streams.
+        detail = "\n".join(s.strip() for s in (result.stdout, result.stderr) if s.strip())
+        raise RunError(f"command failed ({result.returncode}): {' '.join(args)}\n{detail}")
+    return result
+
+
+def load_template(path):
+    with open(path) as f:
+        template = yaml.safe_load(f)
+    with open(SCHEMA_PATH) as f:
+        schema = json.load(f)
+    try:
+        jsonschema.validate(template, schema)
+    except jsonschema.ValidationError as e:
+        raise TemplateError(f"{path}: {e.message} (at {'/'.join(map(str, e.absolute_path)) or '<root>'})")
+    forbidden = FORBIDDEN_ENV & set(template.get("env", {}))
+    if forbidden:
+        raise TemplateError(
+            f"{path}: env must not set provider API keys: {', '.join(sorted(forbidden))}"
+        )
+    return template
+
+
+def repo_parts(repo_id):
+    host, owner, name = repo_id.split("/")
+    return host, owner, name
+
+
+def clone_url(repo, exe_cfg):
+    """Where to clone from.
+
+    A private repo goes through the GitHub integration's aggregate hostname,
+    which is `github.int.exe.xyz` whatever the integration is named — so this
+    follows the repo's declared intent rather than trying to recognise a name.
+    """
+    host, owner, name = repo_parts(repo["id"])
+    if repo.get("private"):
+        if host != "github.com":
+            raise TemplateError(f"{repo['id']}: private cloning is only implemented for github.com")
+        return f"https://github.int.exe.xyz/{owner}/{name}.git"
+    return f"https://{host}/{owner}/{name}.git"
+
+
+# Which model id proves an LLM integration can serve a runtime. An account can
+# attach several: one may hold a personal subscription for OpenAI while another
+# serves Anthropic from the managed gateway, so the right host differs per
+# runtime and cannot be assumed from the integration's name.
+LLM_MODEL_MARKER = {"codex": "gpt-", "claude": "claude"}
+
+
+def render_llm_discovery(runtime):
+    """Shell that finds the LLM integration serving this runtime and configures it.
+
+    `exeuntu configure <agent>` picks the integration named `llm`, which is only
+    correct while that one integration serves every provider. Asking reflection
+    which integrations are attached, then asking each one which models it serves,
+    is what keeps this honest when providers are split across integrations.
+    """
+    marker = LLM_MODEL_MARKER[runtime]
+    lines = [
+        "AGENT_LLM_HOST=",
+        "for cand in $(curl -sf https://reflection.int.exe.xyz/integrations "
+        "| jq -r '.integrations[] | select(.type==\"llm\") | .name'); do",
+        f"  if curl -sf --max-time 20 https://$cand.int.exe.xyz/v1/models "
+        f"| jq -e '[.data[].id] | any(startswith(\"{marker}\"))' >/dev/null 2>&1; then",
+        "    AGENT_LLM_HOST=$cand.int.exe.xyz; break",
+        "  fi",
+        "done",
+        f'test -n "$AGENT_LLM_HOST" || {{ echo "no attached LLM integration serves {marker}* for {runtime}" >&2; exit 1; }}',
+        'echo "using LLM integration host: $AGENT_LLM_HOST"',
+    ]
+    if runtime == "codex":
+        lines += [
+            'mkdir -p "$HOME"/.codex',
+            'cat > "$HOME"/.codex/config.toml <<TOML',
+            "model_provider = \"exe\"",
+            "",
+            "[model_providers.exe]",
+            "name = \"exe.dev gateway\"",
+            'base_url = "https://$AGENT_LLM_HOST/v1"',
+            "wire_api = \"responses\"",
+            "TOML",
+        ]
+    else:
+        lines += [
+            'mkdir -p "$HOME"/.claude',
+            'cat > "$HOME"/.claude/settings.json <<JSON',
+            '{"apiKeyHelper":"printf implicit","env":{"ANTHROPIC_BASE_URL":"https://$AGENT_LLM_HOST"}}',
+            "JSON",
+        ]
+    return lines
+
+
+def render_setup_script(template, runtime, exe_cfg):
+    lines = [
+        "#!/usr/bin/env bash",
+        f"# generated by agent-run from template '{template['name']}' (runtime: {runtime})",
+        "set -euxo pipefail",
+        f"WORK={WORKDIR}",
+        'mkdir -p "$WORK"',
+        "",
+    ]
+
+    for repo in template["repos"]:
+        _, _, name = repo_parts(repo["id"])
+        path = repo.get("path", name)
+        branch = f" --branch {shlex.quote(repo['ref'])}" if repo.get("ref") else ""
+        lines.append(f'git clone{branch} {clone_url(repo, exe_cfg)} "$WORK"/{shlex.quote(path)}')
+    lines.append("")
+
+    for step in template.get("setup", []):
+        if step == "configure-llm-integration":
+            lines.extend(render_llm_discovery(runtime))
+        elif step == "update-runtimes":
+            lines.append(f"sudo exeuntu update {RUNTIME_PACKAGES[runtime]}")
+        else:
+            if step.get("cwd"):
+                lines.append(f'( cd "$WORK"/{shlex.quote(step["cwd"])} && {step["run"]} )')
+            else:
+                lines.append(step["run"])
+    lines.append("")
+
+    for check in template.get("checks", []):
+        lines.append(check)
+
+    lines += ["", f"date -u +%FT%TZ > {READY_MARKER}", ""]
+    return "\n".join(lines)
+
+
+def compile_exe_dev(template, runtime, name):
+    """Return (argv, setup_script) for the VM creation call. Executes nothing."""
+    if runtime not in template["runtimes"]:
+        raise TemplateError(
+            f"runtime '{runtime}' is not allowed by template '{template['name']}' "
+            f"(allowed: {', '.join(template['runtimes'])})"
+        )
+    exe_cfg = template.get("providers", {}).get("exe.dev", {})
+
+    script = render_setup_script(template, runtime, exe_cfg)
+    size = len(script.encode())
+    if size > SETUP_SCRIPT_LIMIT:
+        raise TemplateError(
+            f"setup script is {size} bytes; exe.dev limits --setup-script to {SETUP_SCRIPT_LIMIT}"
+        )
+
+    args = ["ssh", "exe.dev", "new", "--json", f"--name={name}"]
+    resources = template.get("resources", {})
+    if "cpu" in resources:
+        args.append(f"--cpu={resources['cpu']}")
+    if "memory" in resources:
+        args.append(f"--memory={resources['memory']}")
+    if "disk" in resources:
+        args.append(f"--disk={resources['disk']}")
+    if exe_cfg.get("image"):
+        args.append(f"--image={exe_cfg['image']}")
+    for key, value in template.get("env", {}).items():
+        args.append(f"--env={key}={value}")
+    for integration in exe_cfg.get("integrations", []):
+        args.append(f"--integration={integration}")
+    # Template tags are explicit user intent; run metadata rides in the comment
+    # instead of a tag because tag-scoped SSH keys reject unknown --tag values.
+    for tag in exe_cfg.get("tags", []):
+        args.append(f"--tag={tag}")
+    args.append(f"--comment=agent-run:{template['name']}:{runtime}")
+    args.append("--setup-script=/dev/stdin")
+
+    # ssh joins remote arguments with spaces and exe.dev's parser splits on
+    # them with no quoting, so no argument may contain whitespace.
+    for arg in args[2:]:
+        if len(arg.split()) > 1:
+            raise TemplateError(f"argument would be split by the provider's parser: {arg!r}")
+    return args, script
+
+
+ADAPTERS = {"exe.dev": compile_exe_dev}
+
+
+def display_command(args, script_path):
+    return " ".join(shlex.quote(a) for a in args) + f" < {shlex.quote(str(script_path))}"
+
+
+# --- run records ------------------------------------------------------------
+
+
+def state_root():
+    override = os.environ.get("AGENT_RUN_STATE_PATH")
+    root = pathlib.Path(override) if override else pathlib.Path.home() / ".local/state/agent-run"
+    return root
+
+
+def run_record_path(name):
+    return state_root() / "runs" / f"{name}.json"
+
+
+def save_run(record):
+    path = run_record_path(record["name"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record, indent=2) + "\n")
+
+
+def load_run(name):
+    path = run_record_path(name)
+    if not path.exists():
+        raise RunError(f"no run named '{name}' (see 'agent-run status')")
+    return json.loads(path.read_text())
+
+
+def list_runs():
+    runs_dir = state_root() / "runs"
+    if not runs_dir.is_dir():
+        return []
+    records = [json.loads(p.read_text()) for p in sorted(runs_dir.glob("*.json"))]
+    return sorted(records, key=lambda r: r.get("created_at", ""), reverse=True)
+
+
+def utc_now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# --- provider operations ----------------------------------------------------
+
+
+def vm_exec(vm, command, *, check=True):
+    """Run a command on a VM via the exe.dev gateway.
+
+    Direct `ssh <vm>.exe.xyz <command>` is unreliable (the gateway sometimes
+    routes it into its own REPL, and did so consistently for a recreated VM
+    name), so every remote command goes through `ssh exe.dev ssh <vm>`.
+    Caveat: the gateway does not forward stdin to the VM.
+    """
+    return sh(["ssh", *SSH_BATCH_OPTS, "exe.dev", "ssh", vm, command], check=check)
+
+
+# exe.dev refuses some creation flags outright when the SSH key is tag-scoped.
+# The raw message names the restriction but not the way out, and the way out is
+# not obvious: attach the integration account-wide instead, or use an unscoped key.
+TAG_SCOPE_HINTS = (
+    (
+        "cannot modify integrations",
+        "this SSH key is tag-scoped, so --integration cannot attach anything at creation.\n"
+        "  Either attach the integration to auto:all (or to the tag your VMs already carry)\n"
+        "  and drop `integrations:` from the template, or register an unscoped key:\n"
+        "    ssh-keygen -t ed25519 -C exe-dev -f ~/.ssh/id_exe\n"
+        "    cat ~/.ssh/id_exe.pub | ssh exe.dev ssh-key add    # no --tag = unscoped",
+    ),
+    (
+        "can only use --tag",
+        "this SSH key is scoped to a single tag, so `tags:` in the template cannot be used.\n"
+        "  Drop it, and attach integrations account-wide instead.",
+    ),
+)
+
+
+def create_vm(argv, script):
+    try:
+        result = sh(argv, input_text=script)
+    except RunError as e:
+        for marker, hint in TAG_SCOPE_HINTS:
+            if marker in str(e):
+                raise RunError(f"{e}\n\n{hint}") from None
+        raise
+    try:
+        info = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        raise RunError(f"could not parse VM creation output as JSON:\n{result.stdout.strip()}")
+    if info.get("error"):
+        raise RunError(f"VM creation failed: {info['error']}")
+    ssh_dest = info.get("ssh_dest")
+    if not ssh_dest:
+        raise RunError(f"VM creation output has no ssh_dest:\n{result.stdout.strip()}")
+    return info
+
+
+def read_ready_marker(vm):
+    """The marker's timestamp, or None while the VM is not ready.
+
+    The gateway exits 0 even when the inner command fails and folds the inner
+    stderr into stdout, so neither the exit code nor a non-empty stdout is
+    evidence of readiness -- a well-formed marker timestamp is.
+    """
+    result = vm_exec(vm, f"cat {READY_MARKER_REMOTE}", check=False)
+    if result.returncode != 0:
+        return None
+    stamp = result.stdout.strip()
+    return stamp if READY_MARKER_RE.match(stamp) else None
+
+
+def wait_ready(vm, timeout, interval):
+    deadline = time.monotonic() + timeout
+    while True:
+        stamp = read_ready_marker(vm)
+        if stamp:
+            return stamp
+        if time.monotonic() >= deadline:
+            raise RunError(
+                f"VM did not become ready within {timeout}s; "
+                f"inspect with: agent-run logs <run-name>"
+            )
+        time.sleep(interval)
+
+
+# File content travels base64-encoded inside the command line; keep it
+# comfortably under SSH command-length limits.
+PROMPT_LIMIT = 96 * 1024
+
+
+def push_file(vm, remote_path, content):
+    """Write `content` to `remote_path` on the VM.
+
+    The gateway neither forwards stdin nor preserves shell quoting, so anything
+    containing spaces or quotes cannot be passed as an argument — it arrives
+    split into separate argv entries. Base64 sidesteps both: the payload is a
+    single whitespace-free token that survives the gateway intact.
+    """
+    if len(content.encode()) > PROMPT_LIMIT:
+        raise RunError(f"{remote_path} exceeds {PROMPT_LIMIT} bytes; put it in a repo instead")
+    encoded = base64.b64encode(content.encode()).decode()
+    parent = remote_path.rsplit("/", 1)[0]
+    vm_exec(vm, f"mkdir -p {parent} && echo {encoded} | base64 -d > {remote_path}")
+
+
+def push_prompt(vm, prompt_path):
+    push_file(vm, PROMPT_REMOTE, pathlib.Path(prompt_path).read_text())
+
+
+# --- running and observing an agent -----------------------------------------
+
+
+# Each runtime spells the same three privilege levels differently. Mapping them
+# explicitly keeps `--sandbox` meaningful whichever runtime is chosen; a flag
+# that silently does nothing is worse than no flag.
+CLAUDE_PERMISSION_MODE = {
+    "read-only": "plan",
+    "workspace-write": "acceptEdits",
+    "danger-full-access": "bypassPermissions",
+}
+
+
+def agent_command(runtime, sandbox):
+    """The non-interactive invocation for one runtime at one privilege level.
+
+    The prompt is read from a file rather than interpolated, so model-facing
+    text never has to survive the gateway's argument splitting.
+    """
+    prompt = shell_path(PROMPT_REMOTE)
+    if runtime == "codex":
+        return f'codex exec -C "$WORKDIR" --sandbox {sandbox} "$(cat {prompt})"'
+    if runtime == "claude":
+        return f'claude -p "$(cat {prompt})" --permission-mode {CLAUDE_PERMISSION_MODE[sandbox]}'
+    raise RunError(f"no runner defined for runtime '{runtime}'")
+
+
+def primary_workdir(template):
+    """The directory an agent should start in, as a remote path."""
+    repos = template.get("repos", [])
+    primary = next((r for r in repos if r.get("role") == "primary"), repos[0] if repos else None)
+    if not primary:
+        return "~/work"
+    _, _, name = repo_parts(primary["id"])
+    return f"~/work/{primary.get('path', name)}"
+
+
+def shell_path(remote_path):
+    """`~/x` -> `$HOME/x`, so the path still resolves inside double quotes.
+
+    Bash expands a bare `~` but not a quoted one, and every path here is quoted
+    to survive spaces.
+    """
+    if remote_path == "~":
+        return "$HOME"
+    if remote_path.startswith("~/"):
+        return f"$HOME/{remote_path[2:]}"
+    return remote_path
+
+
+def render_runner(runtime, sandbox, workdir):
+    """Shell that runs the agent in the foreground and records its exit code.
+
+    tmux owns the backgrounding; this script stays in the foreground so tmux's
+    session lifetime is the agent's lifetime, which is what makes
+    `tmux has-session` a truthful liveness probe.
+    """
+    if sandbox not in SANDBOX_MODES:
+        raise RunError(f"unknown sandbox mode '{sandbox}' (expected one of {', '.join(SANDBOX_MODES)})")
+    command = agent_command(runtime, sandbox)
+    return "\n".join(
+        [
+            "#!/usr/bin/env bash",
+            f"# generated by agent-run (runtime: {runtime}, sandbox: {sandbox})",
+            "set -uo pipefail",
+            f'WORKDIR="{shell_path(workdir)}"',
+            'cd "$WORKDIR" || exit 1',
+            f"rm -f {shell_path(AGENT_EXIT_REMOTE)}",
+            f"{command} 2>&1 | tee -a {shell_path(AGENT_LOG_REMOTE)}",
+            "rc=${PIPESTATUS[0]}",
+            f"echo $rc > {shell_path(AGENT_EXIT_REMOTE)}",
+            'exit "$rc"',
+            "",
+        ]
+    )
+
+
+# Single command, no quoting: `has-session` is the liveness probe, and the exit
+# file is the record left behind once the session is gone.
+AGENT_STATE_CMD = (
+    f"tmux has-session -t {TMUX_SESSION} >/dev/null 2>&1 && echo RUNNING "
+    f"|| echo DONE:$(cat {AGENT_EXIT_REMOTE} 2>/dev/null || echo ?)"
+)
+
+
+def parse_agent_state(stdout):
+    """Turn the probe's output into a state string, or None if unreadable."""
+    token = stdout.strip().splitlines()[-1].strip() if stdout.strip() else ""
+    if token == "RUNNING":
+        return "running"
+    if token.startswith("DONE:"):
+        code = token.split(":", 1)[1]
+        return "exited(0)" if code == "0" else f"exited({code})"
+    return None
+
+
+def agent_state(record):
+    """Live agent state for a run, or a local-only answer when it cannot ask."""
+    if record.get("status") == "deleted":
+        return "deleted"
+    if not record.get("started_at"):
+        return "not-started"
+    result = vm_exec(record["vm"], AGENT_STATE_CMD, check=False)
+    return parse_agent_state(result.stdout) or "unreachable"
+
+
+def attach_argv(vm, session=TMUX_SESSION):
+    return ["ssh", "-t", "exe.dev", "ssh", vm, "tmux", "attach", "-t", session]
+
+
+def follow_argv(vm, remote_path):
+    return ["ssh", "exe.dev", "ssh", vm, "tail", "-n", "200", "-f", remote_path]
+
+
+def plan_monitor_windows(existing, wanted):
+    """(windows to open, windows to close) for an idempotent dashboard refresh.
+
+    Refreshing must not disturb what you are already watching, so windows that
+    are still wanted are left exactly as they are.
+    """
+    add = [name for name in wanted if name not in existing]
+    kill = [name for name in existing if name not in wanted]
+    return add, kill
+
+
+def provider_vm_names():
+    """Names of VMs currently listed by exe.dev, or None if the listing is unusable."""
+    result = sh(["ssh", "exe.dev", "ls", "--json"], check=False)
+    if result.returncode != 0:
+        return None
+    try:
+        listing = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(listing, dict):
+        listing = listing.get("vms", [])
+    if not isinstance(listing, list):
+        return None
+    names = {vm.get("vm_name") or vm.get("name") for vm in listing if isinstance(vm, dict)}
+    return names - {None}
+
+
+# --- commands ---------------------------------------------------------------
+
+
+def cmd_validate(args):
+    load_template(args.template)
+    print(f"{args.template}: valid")
+
+
+def cmd_compile(args):
+    template = load_template(args.template)
+    adapter = ADAPTERS[args.provider]
+    name = args.name or f"{template['name']}-{args.runtime}"
+    argv, script = adapter(template, args.runtime, name)
+    script_path = pathlib.Path(args.script_out or f"{name}-setup.sh")
+    script_path.write_text(script)
+    print(f"setup script -> {script_path} ({len(script.encode())} bytes)", file=sys.stderr)
+    print(display_command(argv, script_path))
+
+
+def cmd_dispatch(args):
+    template = load_template(args.template)
+    adapter = ADAPTERS[args.provider]
+    name = args.name or f"{template['name']}-{args.runtime}"
+
+    record_path = run_record_path(name)
+    if record_path.exists() and json.loads(record_path.read_text()).get("status") != "deleted":
+        raise RunError(f"run '{name}' already exists; 'agent-run rm {name}' first or pick another --name")
+
+    argv, script = adapter(template, args.runtime, name)
+    print(f"creating VM: {' '.join(shlex.quote(a) for a in argv)}", file=sys.stderr)
+    info = create_vm(argv, script)
+    record = {
+        "name": name,
+        "vm": info.get("vm_name") or info.get("name") or name,
+        "ssh_dest": info["ssh_dest"],
+        "provider": args.provider,
+        "template": str(pathlib.Path(args.template).resolve()),
+        "runtime": args.runtime,
+        "status": "provisioning",
+        "created_at": utc_now(),
+        # Where the agent should work: the primary repo if the template has one,
+        # otherwise the shared work directory.
+        "workdir": primary_workdir(template),
+    }
+    save_run(record)
+    print(f"created VM '{record['vm']}' ({record['ssh_dest']})", file=sys.stderr)
+
+    if args.no_wait:
+        print(f"{name}: provisioning (skipped wait; check with 'agent-run status')")
+        return
+
+    ready_at = wait_ready(record["vm"], args.wait_timeout, args.poll_interval)
+    record["status"] = "ready"
+    record["ready_at"] = ready_at
+    save_run(record)
+
+    if args.prompt_file:
+        push_prompt(record["vm"], args.prompt_file)
+        record["prompt_file"] = str(pathlib.Path(args.prompt_file).resolve())
+        save_run(record)
+        print(f"prompt copied to ~/work/TASK.md", file=sys.stderr)
+
+    print(f"{name}: ready ({record['ssh_dest']})")
+    if "configure-llm-integration" in template.get("setup", []):
+        print("\nnext:")
+        print(f"  agent-run run {name} --prompt-file <task.md>")
+        print(f"  agent-run logs {name} --follow")
+    else:
+        # No configure step, so the runtime has no model access yet.
+        print("\nnext, authenticate the runtime on the VM, then 'agent-run run':")
+        print(f"  ssh -t exe.dev ssh {record['vm']}   # gateway route; direct ssh can land in the exe.dev REPL")
+        print(f"  {MANUAL_AUTH_HINTS[args.runtime]}")
+
+
+def probe_ready(record):
+    """Re-check a provisioning run's readiness marker and update its record."""
+    stamp = read_ready_marker(record["vm"])
+    if stamp:
+        record["status"] = "ready"
+        record["ready_at"] = stamp
+        save_run(record)
+    return record
+
+
+def cmd_status(args):
+    records = list_runs()
+    if not records:
+        if args.json:
+            print(json.dumps({"runs": []}, indent=2))
+        else:
+            print("no runs; create one with 'agent-run dispatch'")
+        return
+    live = None if args.offline else provider_vm_names()
+    if live is None and not args.offline and not args.json:
+        print("(could not read provider VM listing; showing local state only)", file=sys.stderr)
+
+    rows = []
+    for record in records:
+        if record["status"] == "provisioning" and not args.offline:
+            record = probe_ready(record)
+        vm_status = record["status"]
+        if live is not None and vm_status != "deleted" and record["vm"] not in live:
+            vm_status = "missing"
+        if vm_status == "provisioning":
+            vm_status = "provisioning?"  # stalled or in progress; see 'agent-run logs'
+        agent = "-"
+        if not args.offline and vm_status in {"ready", "provisioning?"}:
+            agent = agent_state(record)
+        elif vm_status == "deleted":
+            agent = "deleted"
+        rows.append(
+            {
+                "name": record["name"],
+                "vm": record["vm"],
+                "vm_status": vm_status,
+                "agent": agent,
+                "runtime": record["runtime"],
+                "sandbox": record.get("sandbox"),
+                "ssh_dest": record.get("ssh_dest"),
+                "created_at": record["created_at"],
+                "started_at": record.get("started_at"),
+            }
+        )
+
+    if args.json:
+        print(json.dumps({"runs": rows}, indent=2))
+        return
+    for row in rows:
+        line = (
+            f"{row['name']:22} {row['vm_status']:13} {row['agent']:13} "
+            f"{row['runtime']:6} {row['ssh_dest'] or '-':26} {row['created_at']}"
+        )
+        print(line.rstrip())
+
+
+def cmd_run(args):
+    record = load_run(args.name)
+    if record["status"] == "deleted":
+        raise RunError(f"run '{args.name}' is deleted; dispatch a new one")
+    if record["status"] != "ready":
+        raise RunError(
+            f"run '{args.name}' is '{record['status']}', not ready; "
+            f"check with 'agent-run status' or 'agent-run logs {args.name} --source setup'"
+        )
+    if not args.force and agent_state(record) == "running":
+        raise RunError(f"an agent is already running in '{args.name}'; pass --force to start another")
+
+    if args.prompt_file:
+        push_prompt(record["vm"], args.prompt_file)
+        record["prompt_file"] = str(pathlib.Path(args.prompt_file).resolve())
+
+    workdir = record.get("workdir", "~/work")
+    push_file(record["vm"], RUNNER_REMOTE, render_runner(record["runtime"], args.sandbox, workdir))
+    # No quoting survives the gateway, so every token here stays whitespace-free.
+    vm_exec(record["vm"], f"tmux kill-session -t {TMUX_SESSION} >/dev/null 2>&1; true", check=False)
+    vm_exec(record["vm"], f"tmux new-session -d -s {TMUX_SESSION} bash {RUNNER_REMOTE}")
+
+    record.update(
+        tmux_session=TMUX_SESSION,
+        agent_log=AGENT_LOG_REMOTE,
+        sandbox=args.sandbox,
+        started_at=utc_now(),
+    )
+    save_run(record)
+    print(f"{args.name}: agent started ({record['runtime']}, sandbox {args.sandbox})")
+    print(f"  watch:  agent-run logs {args.name} --follow")
+    print(f"  drive:  agent-run attach {args.name}")
+
+
+def cmd_logs(args):
+    record = load_run(args.name)
+    if record["status"] == "deleted":
+        raise RunError(f"run '{args.name}' is deleted; its VM and logs are gone")
+
+    source = args.source
+    if source == "auto":
+        source = "agent" if record.get("started_at") else "setup"
+
+    if source == "setup":
+        if args.follow:
+            raise RunError("--follow works on the agent log; the setup log is finished by then")
+        result = vm_exec(record["vm"], SETUP_LOG_CMD, check=False)
+        output = result.stdout.strip() or result.stderr.strip()
+        print("\n".join(output.splitlines()[-args.lines:]))
+        return
+
+    log = record.get("agent_log", AGENT_LOG_REMOTE)
+    if args.follow:
+        argv = follow_argv(record["vm"], log)
+        os.execvp(argv[0], argv)  # streams until interrupted
+    result = vm_exec(record["vm"], f"tail -n {args.lines} {log}", check=False)
+    output = result.stdout.strip() or result.stderr.strip()
+    print(output or f"(no agent output yet; start one with 'agent-run run {args.name}')")
+
+
+def cmd_attach(args):
+    record = load_run(args.name)
+    if record["status"] == "deleted":
+        raise RunError(f"run '{args.name}' is deleted; its VM is gone")
+    state = agent_state(record)
+    if state != "running":
+        raise RunError(
+            f"no live agent in '{args.name}' (state: {state}); "
+            f"see 'agent-run logs {args.name}' for what it left behind"
+        )
+    argv = attach_argv(record["vm"], record.get("tmux_session", TMUX_SESSION))
+    os.execvp(argv[0], argv)  # hands the terminal to tmux
+
+
+def require_local_tmux():
+    """The dashboard is local tmux; `attach` and `logs` need none of it."""
+    if shutil.which("tmux") is None:
+        raise RunError(
+            "monitor needs tmux on this machine (try: brew install tmux). "
+            "Without it, use 'agent-run status' to see every run, "
+            "'agent-run logs <name> --follow' to watch one, and "
+            "'agent-run attach <name>' to drive one — attach uses the VM's tmux, not yours."
+        )
+
+
+def cmd_monitor(args):
+    require_local_tmux()
+    session = args.session
+    wanted = [r["name"] for r in list_runs() if r["status"] != "deleted"]
+    if not wanted:
+        print("no live runs to monitor; dispatch one with 'agent-run dispatch'")
+        return
+
+    exists = sh(["tmux", "has-session", "-t", session], check=False).returncode == 0
+    if not exists:
+        sh(["tmux", "new-session", "-d", "-s", session, "-n", wanted[0], follow_cmd(wanted[0])])
+        # A dashboard whose windows vanish when their stream ends is useless:
+        # the last one closing takes the session, and the view, with it. Keep
+        # dead panes so a finished agent's final output stays readable.
+        sh(["tmux", "set-option", "-t", session, "remain-on-exit", "on"], check=False)
+        existing = [wanted[0]]
+    else:
+        listed = sh(
+            ["tmux", "list-windows", "-t", session, "-F", "#{window_name}"], check=False
+        )
+        existing = [w for w in listed.stdout.split() if w]
+
+    add, kill = plan_monitor_windows(existing, wanted)
+    for name in add:
+        sh(["tmux", "new-window", "-d", "-t", session, "-n", name, follow_cmd(name)])
+    for name in kill:
+        sh(["tmux", "kill-window", "-t", f"{session}:{name}"], check=False)
+
+    print(f"{session}: {len(wanted)} run(s) — {', '.join(wanted)}")
+    if add:
+        print(f"  opened:  {', '.join(add)}")
+    if kill:
+        print(f"  pruned:  {', '.join(kill)}")
+    print(f"\nattach with:  tmux attach -t {session}")
+
+
+def follow_cmd(name):
+    """The command a dashboard window runs: this tool, following one run."""
+    return f"{shlex.quote(str(pathlib.Path(__file__).resolve()))} logs {shlex.quote(name)} --follow"
+
+
+def cmd_rm(args):
+    record = load_run(args.name)
+    if record["status"] == "deleted":
+        print(f"{args.name}: already deleted")
+        return
+    live = provider_vm_names()
+    if live is not None and record["vm"] not in live:
+        record["status"] = "deleted"
+        record["deleted_at"] = utc_now()
+        save_run(record)
+        print(f"{args.name}: VM '{record['vm']}' is already gone; marked deleted")
+        return
+    if not args.yes:
+        answer = input(f"delete VM '{record['vm']}' ({record.get('ssh_dest', '?')})? [y/N] ")
+        if answer.strip().lower() not in {"y", "yes"}:
+            print("aborted")
+            return
+    sh(["ssh", "exe.dev", "rm", record["vm"]])
+    record["status"] = "deleted"
+    record["deleted_at"] = utc_now()
+    save_run(record)
+    print(f"{args.name}: deleted VM '{record['vm']}'")
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="agent-run", description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("validate", help="validate a template against the schema")
+    p.add_argument("template")
+    p.set_defaults(func=cmd_validate)
+
+    p = sub.add_parser("compile", help="compile a template into a provider call (prints it; never executes)")
+    p.add_argument("template")
+    p.add_argument("--provider", choices=sorted(ADAPTERS), default="exe.dev")
+    p.add_argument("--runtime", choices=sorted(RUNTIME_PACKAGES), required=True)
+    p.add_argument("--name", help="VM name (default: <template>-<runtime>)")
+    p.add_argument("--script-out", help="where to write the generated setup script")
+    p.set_defaults(func=cmd_compile)
+
+    p = sub.add_parser("dispatch", help="create a VM from a template and wait until it is ready")
+    p.add_argument("template")
+    p.add_argument("--provider", choices=sorted(ADAPTERS), default="exe.dev")
+    p.add_argument("--runtime", choices=sorted(RUNTIME_PACKAGES), required=True)
+    p.add_argument("--name", help="run and VM name (default: <template>-<runtime>)")
+    p.add_argument("--prompt-file", help="copied to ~/work/TASK.md once the VM is ready")
+    p.add_argument("--no-wait", action="store_true", help="create the VM and return immediately")
+    p.add_argument("--wait-timeout", type=int, default=900, help="seconds to wait for readiness")
+    p.add_argument("--poll-interval", type=int, default=15, help="seconds between readiness checks")
+    p.set_defaults(func=cmd_dispatch)
+
+    p = sub.add_parser("status", help="show dispatched runs, their VM state, and their agent state")
+    p.add_argument("--offline", action="store_true", help="skip the provider VM listing")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("run", help="start the agent on a ready VM, inside tmux")
+    p.add_argument("name")
+    p.add_argument("--prompt-file", help="task prompt to push before starting")
+    p.add_argument(
+        "--sandbox",
+        choices=SANDBOX_MODES,
+        default=DEFAULT_SANDBOX,
+        help=(
+            f"agent sandbox (default {DEFAULT_SANDBOX}). workspace-write keeps .git read-only, "
+            "so the agent cannot branch or commit; danger-full-access allows git and makes the "
+            "VM the only isolation boundary"
+        ),
+    )
+    p.add_argument("--force", action="store_true", help="start even if an agent is already running")
+    p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser("logs", help="show a run's agent output or its first-boot setup log")
+    p.add_argument("name")
+    p.add_argument("--lines", type=int, default=40, help="log lines to show (default 40)")
+    p.add_argument(
+        "--source",
+        choices=("auto", "agent", "setup"),
+        default="auto",
+        help="which log to read (default auto: the agent's once it has started)",
+    )
+    p.add_argument("--follow", action="store_true", help="stream the agent log until interrupted")
+    p.set_defaults(func=cmd_logs)
+
+    p = sub.add_parser("attach", help="attach to a run's tmux session to drive it directly")
+    p.add_argument("name")
+    p.set_defaults(func=cmd_attach)
+
+    p = sub.add_parser("monitor", help="build a local tmux dashboard with a window per live run")
+    p.add_argument("--session", default="agent-run", help="local tmux session name")
+    p.set_defaults(func=cmd_monitor)
+
+    p = sub.add_parser("rm", help="delete a run's VM and mark the run deleted")
+    p.add_argument("name")
+    p.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    p.set_defaults(func=cmd_rm)
+
+    args = parser.parse_args()
+    try:
+        args.func(args)
+    except (TemplateError, RunError, FileNotFoundError) as e:
+        print(f"agent-run: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

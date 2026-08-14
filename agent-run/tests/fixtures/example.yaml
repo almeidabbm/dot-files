@@ -1,0 +1,38 @@
+# Fixture for the compiler tests. Deliberately exercises every template
+# feature at once so the assertions stay stable while real templates evolve.
+version: 1
+name: example-app
+description: Compiler test fixture; not a template to dispatch.
+
+resources:
+  cpu: 4
+  memory: 8GB
+  disk: 50GB
+
+runtimes: [codex, claude]
+
+repos:
+  - id: github.com/lightdash/lightdash
+    ref: main
+    path: lightdash
+    role: primary
+    private: true
+
+env:
+  NODE_ENV: development
+
+setup:
+  - update-runtimes
+  - run: corepack enable && pnpm install
+    cwd: lightdash
+
+checks:
+  - node --version
+  - pnpm --version
+  - git --version
+
+providers:
+  exe.dev:
+    image: exeuntu
+    integrations: [github]
+    tags: [agent-pilot]

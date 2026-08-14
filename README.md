@@ -6,6 +6,8 @@
 
 ## Quick start
 
+New machine, or new to this workflow? [`docs/SETUP.md`](docs/SETUP.md) walks through git, GitHub, stacked PRs, and running agents on remote sandboxes.
+
 **Full setup** (shell + editor + AI tooling):
 
 ```bash
@@ -207,6 +209,8 @@ Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/rom
 | `link-opencode.sh` | Symlink only OpenCode config                   |
 | `unlink-opencode.sh` | Remove only OpenCode symlinks                |
 | `link-agent-memory.sh` | Install the shared `agent-memory` command   |
+| `link-agent-run.sh` | Install the `agent-run` remote sandbox command |
+| `unlink-agent-run.sh` | Remove the `agent-run` symlink |
 | `unlink-agent-memory.sh` | Remove the shared command symlink         |
 | `list-symlink.sh`  | List all active symlinks pointing to this repo |
 | `doctor.sh`        | Read-only health check: verify expected symlinks resolve (exits non-zero on failure) |
