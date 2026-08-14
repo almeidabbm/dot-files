@@ -72,6 +72,22 @@
           "private": {
             "description": "Clone through the exe.dev GitHub integration gateway instead of the public URL.",
             "type": "boolean"
+          },
+          "setup": {
+            "description": "Steps run inside this repo's checkout, after every clone and before the top-level setup. The checkout is the working directory, so these steps take no cwd.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "run"
+              ],
+              "properties": {
+                "run": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }

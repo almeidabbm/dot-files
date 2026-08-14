@@ -22,6 +22,7 @@ loader.exec_module(agent_run)
 
 # Compiler tests use a fixture, so evolving a real template cannot break them.
 TEMPLATE = ROOT / "tests" / "fixtures" / "example.yaml"
+MULTI_REPO = ROOT / "tests" / "fixtures" / "multi-repo.yaml"
 
 
 def write_yaml(content):
@@ -144,6 +145,129 @@ class CompileTests(unittest.TestCase):
         template["repos"][0]["private"] = True
         _, script = agent_run.compile_exe_dev(template, "codex", "x")
         self.assertIn("https://github.int.exe.xyz/lightdash/lightdash.git", script)
+
+
+class MultiRepoTests(unittest.TestCase):
+    def compile(self, template=None):
+        template = template or agent_run.load_template(MULTI_REPO)
+        return agent_run.compile_exe_dev(template, "codex", "multi")
+
+    def test_colliding_checkout_paths_are_refused(self):
+        # Both would clone to "$WORK/api" and the second would fail deep in the
+        # setup journal, long after dispatch reported success.
+        path = write_yaml(
+            "version: 1\nname: collide\nruntimes: [codex]\nrepos:\n"
+            "  - id: github.com/org-a/api\n    role: primary\n"
+            "  - id: github.com/org-b/api\n"
+        )
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.load_template(path)
+        message = str(ctx.exception)
+        self.assertIn("github.com/org-a/api", message)
+        self.assertIn("github.com/org-b/api", message)
+        self.assertIn("path:", message)
+
+    def test_an_explicit_path_resolves_a_collision(self):
+        path = write_yaml(
+            "version: 1\nname: fine\nruntimes: [codex]\nrepos:\n"
+            "  - id: github.com/org-a/api\n    role: primary\n"
+            "  - id: github.com/org-b/api\n    path: api-b\n"
+        )
+        self.assertEqual(len(agent_run.load_template(path)["repos"]), 2)
+
+    def test_several_repos_with_no_primary_are_refused(self):
+        # Otherwise the agent starts in whichever repo happens to be declared
+        # first, which is an ordering accident rather than a decision.
+        path = write_yaml(
+            "version: 1\nname: nohome\nruntimes: [codex]\nrepos:\n"
+            "  - id: github.com/o/a\n  - id: github.com/o/b\n"
+        )
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.load_template(path)
+        self.assertIn("role: primary", str(ctx.exception))
+
+    def test_two_primaries_are_refused(self):
+        path = write_yaml(
+            "version: 1\nname: twohomes\nruntimes: [codex]\nrepos:\n"
+            "  - id: github.com/o/a\n    role: primary\n"
+            "  - id: github.com/o/b\n    role: primary\n"
+        )
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.load_template(path)
+        self.assertIn("only one repo", str(ctx.exception))
+
+    def test_a_single_repo_still_needs_no_primary_marker(self):
+        # The fallback stays safe precisely because ambiguity is refused above.
+        path = write_yaml(
+            "version: 1\nname: solo\nruntimes: [codex]\nrepos:\n  - id: github.com/o/only\n"
+        )
+        template = agent_run.load_template(path)
+        self.assertEqual(agent_run.primary_workdir(template), "~/work/only")
+
+    def test_every_repo_is_cloned(self):
+        _, script = self.compile()
+        self.assertIn('https://github.int.exe.xyz/lightdash/lightdash.git "$WORK"/lightdash', script)
+        self.assertIn('https://github.com/almeidabbm/dot-files.git "$WORK"/dot-files', script)
+
+    def test_per_repo_steps_run_in_their_own_checkout(self):
+        _, script = self.compile()
+        self.assertIn('( cd "$WORK"/lightdash && pnpm install --frozen-lockfile )', script)
+        self.assertIn('( cd "$WORK"/dot-files && python3 -m pip install --user jsonschema pyyaml )', script)
+
+    def test_template_wide_steps_precede_the_per_repo_ones(self):
+        # The template-wide list is machine-level provisioning; a repo's own
+        # install is the thing that depends on it, so it cannot run first.
+        _, script = self.compile()
+        self.assertLess(
+            script.index("echo cross-repo step"),
+            script.index("pnpm install --frozen-lockfile"),
+        )
+
+    def test_per_repo_steps_precede_the_checks(self):
+        _, script = self.compile()
+        self.assertLess(
+            script.index("pnpm install --frozen-lockfile"),
+            script.index("git --version"),
+        )
+
+    def test_clones_precede_every_setup_step(self):
+        _, script = self.compile()
+        self.assertLess(
+            script.index('"$WORK"/dot-files\n'),  # the clone, not the cd
+            script.index("pnpm install --frozen-lockfile"),
+        )
+
+
+class ManifestTests(unittest.TestCase):
+    def manifest(self):
+        _, script = agent_run.compile_exe_dev(agent_run.load_template(MULTI_REPO), "codex", "m")
+        body = script.split("<<'REPOSMD'\n", 1)[1].split("\nREPOSMD", 1)[0]
+        return body
+
+    def test_manifest_lists_every_checkout_with_its_repo(self):
+        body = self.manifest()
+        self.assertIn("`~/work/lightdash` | github.com/lightdash/lightdash", body)
+        self.assertIn("`~/work/dot-files` | github.com/almeidabbm/dot-files", body)
+
+    def test_manifest_marks_exactly_one_primary(self):
+        rows = [l for l in self.manifest().splitlines() if l.startswith("| `~/work/")]
+        primary = [r for r in rows if r.endswith("| primary |")]
+        self.assertEqual(len(primary), 1)
+        self.assertIn("github.com/lightdash/lightdash", primary[0])
+
+    def test_manifest_names_a_repo_with_no_ref(self):
+        # An unpinned checkout is on the remote's default branch; saying so beats
+        # an empty cell the agent has to interpret.
+        self.assertIn("| (default) |", self.manifest())
+
+    def test_manifest_is_a_quoted_heredoc_so_set_x_cannot_echo_it(self):
+        _, script = agent_run.compile_exe_dev(agent_run.load_template(MULTI_REPO), "codex", "m")
+        self.assertIn("<<'REPOSMD'", script)
+
+    def test_single_repo_template_still_gets_a_manifest(self):
+        _, script = agent_run.compile_exe_dev(agent_run.load_template(TEMPLATE), "codex", "m")
+        self.assertIn("REPOS.md", script)
+        self.assertIn("| primary |", script)
 
 
 class ProviderErrorTests(unittest.TestCase):

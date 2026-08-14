@@ -111,12 +111,51 @@ def load_template(path):
         raise TemplateError(
             f"{path}: env must not set provider API keys: {', '.join(sorted(forbidden))}"
         )
+    validate_repos(template, path)
     return template
 
 
 def repo_parts(repo_id):
     host, owner, name = repo_id.split("/")
     return host, owner, name
+
+
+def repo_path(repo):
+    """The checkout directory for a repo, relative to the sandbox workdir."""
+    return repo.get("path") or repo_parts(repo["id"])[2]
+
+
+def validate_repos(template, path="template"):
+    """Reject repo sets the setup script could not clone, or an agent could not start in.
+
+    Both failures are silent otherwise: colliding checkouts surface as a `git
+    clone` error deep in the setup journal, and an unmarked primary among
+    several repos means `primary_workdir` picks the first one declared, which is
+    an ordering accident rather than a decision.
+    """
+    repos = template.get("repos", [])
+
+    by_path = {}
+    for repo in repos:
+        by_path.setdefault(repo_path(repo), []).append(repo["id"])
+    for checkout, ids in by_path.items():
+        if len(ids) > 1:
+            raise TemplateError(
+                f"{path}: {len(ids)} repos both check out to '{checkout}': {', '.join(ids)}. "
+                f"Give all but one an explicit 'path:'"
+            )
+
+    primaries = [r["id"] for r in repos if r.get("role") == "primary"]
+    if len(primaries) > 1:
+        raise TemplateError(
+            f"{path}: only one repo may be the primary, but {len(primaries)} are: "
+            f"{', '.join(primaries)}. The primary is where the agent starts"
+        )
+    if len(repos) > 1 and not primaries:
+        raise TemplateError(
+            f"{path}: {len(repos)} repos and none marked 'role: primary'. "
+            f"Mark the one the agent should start in"
+        )
 
 
 def clone_url(repo, exe_cfg):
@@ -184,6 +223,41 @@ def render_llm_discovery(runtime):
     return lines
 
 
+# Where the manifest lives, and what an agent is told to read to find its way
+# around a multi-repo box.
+MANIFEST_REMOTE = "~/work/REPOS.md"
+
+
+def render_repos_manifest(template):
+    """Shell writing `~/work/REPOS.md`: what was cloned, where, and which is primary.
+
+    Without it the only repo an agent is told about is the one it starts in, so
+    every other checkout on the box is something it has to stumble across.
+    """
+    repos = template["repos"]
+    primary = primary_repo(repos)
+    rows = []
+    for repo in repos:
+        role = "primary" if repo is primary else repo.get("role", "secondary")
+        rows.append(
+            f"| `~/work/{repo_path(repo)}` | {repo['id']} | {repo.get('ref', '(default)')} | {role} |"
+        )
+    body = [
+        f"# Repositories on this VM",
+        "",
+        f"Cloned by agent-run from template `{template['name']}`. The primary checkout",
+        "is where a task starts; the others are here because the task needs them.",
+        "",
+        "| Path | Repository | Ref | Role |",
+        "| --- | --- | --- | --- |",
+        *rows,
+        "",
+    ]
+    # A quoted heredoc: the body is literal, and `set -x` prints the redirect
+    # rather than the content.
+    return [f'cat > "$WORK"/REPOS.md <<\'REPOSMD\'', *body, "REPOSMD"]
+
+
 def render_setup_script(template, runtime, exe_cfg):
     lines = [
         "#!/usr/bin/env bash",
@@ -195,10 +269,12 @@ def render_setup_script(template, runtime, exe_cfg):
     ]
 
     for repo in template["repos"]:
-        _, _, name = repo_parts(repo["id"])
-        path = repo.get("path", name)
+        path = repo_path(repo)
         branch = f" --branch {shlex.quote(repo['ref'])}" if repo.get("ref") else ""
         lines.append(f'git clone{branch} {clone_url(repo, exe_cfg)} "$WORK"/{shlex.quote(path)}')
+    lines.append("")
+
+    lines.extend(render_repos_manifest(template))
     lines.append("")
 
     for step in template.get("setup", []):
@@ -211,6 +287,14 @@ def render_setup_script(template, runtime, exe_cfg):
                 lines.append(f'( cd "$WORK"/{shlex.quote(step["cwd"])} && {step["run"]} )')
             else:
                 lines.append(step["run"])
+    lines.append("")
+
+    # Per-repo steps run last, in their own checkout. The template-wide list is
+    # machine-level provisioning — the language runtime, the package manager —
+    # and a repo's own install is exactly the thing that depends on it.
+    for repo in template["repos"]:
+        for step in repo.get("setup", []):
+            lines.append(f'( cd "$WORK"/{shlex.quote(repo_path(repo))} && {step["run"]} )')
     lines.append("")
 
     for check in template.get("checks", []):
@@ -451,14 +535,20 @@ def agent_command(runtime, sandbox):
     raise RunError(f"no runner defined for runtime '{runtime}'")
 
 
+def primary_repo(repos):
+    """The repo an agent starts in, or None.
+
+    Falling back to the first declared repo is only safe because
+    `validate_repos` refuses a multi-repo template that marks no primary — with
+    one repo there is nothing to be ambiguous about.
+    """
+    return next((r for r in repos if r.get("role") == "primary"), repos[0] if repos else None)
+
+
 def primary_workdir(template):
     """The directory an agent should start in, as a remote path."""
-    repos = template.get("repos", [])
-    primary = next((r for r in repos if r.get("role") == "primary"), repos[0] if repos else None)
-    if not primary:
-        return "~/work"
-    _, _, name = repo_parts(primary["id"])
-    return f"~/work/{primary.get('path', name)}"
+    primary = primary_repo(template.get("repos", []))
+    return f"~/work/{repo_path(primary)}" if primary else "~/work"
 
 
 def shell_path(remote_path):
@@ -615,8 +705,19 @@ def provider_vm_names():
 
 
 def cmd_validate(args):
-    load_template(args.template)
+    template = load_template(args.template)
     print(f"{args.template}: valid")
+
+    # The 10 KiB cap is a hard failure at compile time, and a template creeps up
+    # on it as repos and setup steps accumulate. Report the budget while there is
+    # still room to act on it.
+    for runtime in template["runtimes"]:
+        size = len(render_setup_script(
+            template, runtime, template.get("providers", {}).get("exe.dev", {})
+        ).encode())
+        pct = size / SETUP_SCRIPT_LIMIT * 100
+        flag = "  <-- near the limit" if pct >= 80 else ""
+        print(f"  setup script ({runtime}): {size} / {SETUP_SCRIPT_LIMIT} bytes ({pct:.0f}%){flag}")
 
 
 def cmd_compile(args):

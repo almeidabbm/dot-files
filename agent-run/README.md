@@ -41,11 +41,15 @@ Run records are machine-local JSON under `~/.local/state/agent-run/runs/`
 
 ### validate
 
-Schema check plus the forbidden-env check. Touches no provider.
+Schema check, repo checks, and the forbidden-env check. Touches no provider.
+Reports the compiled setup script against exe.dev's 10 KiB cap, per runtime, so
+a template creeping toward the limit says so while there is still room to act.
 
 ```sh
 agent-run/bin/agent-run validate agent-run/templates/lightdash-dev.yaml
 # agent-run/templates/lightdash-dev.yaml: valid
+#   setup script (codex): 1606 / 10240 bytes (16%)
+#   setup script (claude): 1572 / 10240 bytes (15%)
 ```
 
 ### compile
@@ -198,13 +202,15 @@ repos:
   - id: github.com/lightdash/lightdash   # host/owner/repo
     ref: main
     path: lightdash            # checkout dir under $HOME/work
-    role: primary              # where the agent starts; first repo if unset
+    role: primary              # where the agent starts
+    private: true              # clone via github.int.exe.xyz
+    setup:                     # runs inside this checkout; takes no cwd
+      - run: pnpm install --frozen-lockfile
 env:
   NODE_ENV: development        # plaintext on the VM — non-secret config only
-setup:
+setup:                         # template-wide: provisions the box, runs first
   - update-runtimes            # named step: updates only the selected runtime
-  - run: corepack enable && pnpm install
-    cwd: lightdash
+  - run: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 checks:                        # each must exit 0 before the marker is written
   - node --version
 providers:                     # the only place provider specifics may appear
@@ -214,9 +220,47 @@ providers:                     # the only place provider specifics may appear
     tags: [agent-pilot]
 ```
 
-The generated first-boot script clones the repos, runs the setup steps, runs the
-checks, then writes `date -u +%FT%TZ` into `$HOME/work/.agent-run-ready`. That
-marker is the readiness contract.
+The generated first-boot script clones the repos, writes the manifest, runs each
+repo's own setup steps, runs the template-wide setup steps, runs the checks, then
+writes `date -u +%FT%TZ` into `$HOME/work/.agent-run-ready`. That marker is the
+readiness contract.
+
+## Several repos on one box
+
+`repos` is a list, and everything above scales to it. Two rules are enforced at
+validate time rather than left to fail on the VM:
+
+| Rule | Why |
+| --- | --- |
+| No two repos may resolve to the same checkout directory | Both would clone to `$WORK/<name>` and the second would fail deep in the setup journal, long after dispatch reported success. Give all but one an explicit `path:` |
+| With more than one repo, exactly one must be `role: primary` | It decides where the agent starts. With no marker the choice falls to declaration order, which is an accident rather than a decision. A single-repo template needs no marker |
+
+Each repo may carry its own `setup:` block, which runs with that checkout as the
+working directory. Ordering is:
+
+```text
+clones -> REPOS.md -> template-wide setup -> per-repo setup -> checks
+```
+
+The split is machine-level versus repo-level. The template-wide list provisions
+the box — the language runtime, the package manager, `configure-llm-integration`
+— and a repo's own `pnpm install` is exactly the thing that depends on it, so
+per-repo steps run last. Anything that has to happen *before* a repo's own steps
+belongs in the template-wide list.
+
+The script also writes `$HOME/work/REPOS.md`, a table of what was cloned, where,
+at which ref, and which one is primary:
+
+```markdown
+| Path | Repository | Ref | Role |
+| --- | --- | --- | --- |
+| `~/work/lightdash` | github.com/lightdash/lightdash | main | primary |
+| `~/work/dot-files` | github.com/almeidabbm/dot-files | (default) | secondary |
+```
+
+Without it the only repo an agent is told about is the one it starts in, so every
+other checkout is something it has to stumble across. Point at it from `TASK.md`
+when a task genuinely spans repositories.
 
 Two size limits apply: the setup script must stay under 10 KiB (exe.dev's cap)
 and a pushed file such as `TASK.md` under 96 KiB. Anything larger belongs in a
