@@ -114,6 +114,7 @@ last-updated: <ISO timestamp>
 - When the user asks what they were working on or seems disoriented, use the `status` workflow.
 - When implementation is done and tests pass, use the `pre-merge` workflow before shipping.
 - After a PR is merged or the user wants to wrap up the task, use the `archive-task` workflow.
+- Harness mechanics live in `.ai/HARNESS.md` in the dot-files repo: read it when a task binding is ambiguous, the trunk guard blocks a command, `agent-memory` is missing, or you are changing the harness itself.
 
 ## Spec And Plan Files
 

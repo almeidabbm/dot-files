@@ -113,6 +113,7 @@ The reusable workflow content is agent-agnostic and lives in:
 
 - [`.ai/shared-instructions.md`](.ai/shared-instructions.md) for durable global workflow rules
 - [`.ai/skills/`](.ai/skills/) for reusable task workflows
+- [`.ai/HARNESS.md`](.ai/HARNESS.md) for the machinery behind those rules — layer map, current-task resolution order, guard behaviour, and recovery steps
 
 The shared skills (slash commands in Claude — `/start-task` etc.; skills of the same name in Codex and OpenCode):
 
