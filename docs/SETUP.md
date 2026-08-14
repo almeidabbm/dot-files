@@ -38,6 +38,18 @@ gh extension install github/gh-stack
 `jq` and `tmux` are not optional for this workflow: `jq` parses provider JSON, and `tmux`
 is what keeps a remote agent alive after you disconnect.
 
+`link.sh` puts both CLIs on your PATH via `~/.local/bin`:
+
+```bash
+agent-memory root      # workflow state
+agent-run status       # remote sandboxes
+```
+
+If your shell cannot find them, `~/.local/bin` is not on `PATH` — add it to `.zshrc`, or
+run the installers directly with `./link-agent-memory.sh` and `./link-agent-run.sh`.
+`agent-run` additionally needs the `jsonschema` and `pyyaml` Python modules; its installer
+warns if either is missing.
+
 ---
 
 ## Git and GitHub

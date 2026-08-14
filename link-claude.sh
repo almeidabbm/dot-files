@@ -54,6 +54,7 @@ install_git_guard_hook() {
 
 echo "🤖 Setting up Claude Code configuration..."
 "$DOTFILES_DIR/link-agent-memory.sh"
+"$DOTFILES_DIR/link-agent-run.sh"
 create_symlink "$DOTFILES_DIR/.ai/shared-instructions.md" "$HOME/.claude/CLAUDE.md" "Claude global rules"
 
 # Symlink every shared skill folder under .ai/skills/
