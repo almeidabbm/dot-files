@@ -238,6 +238,29 @@ the chosen runtime and configures it, so no credential is written to the VM and
 no login happens. A template without that step leaves the runtime unauthenticated,
 and `dispatch` then prints the manual login to run before `agent-run run`.
 
+## Watching a run
+
+Four questions, four commands:
+
+| Question | Command |
+| --- | --- |
+| What is running, and is it alive? | `agent-run status [--json]` |
+| What is it doing right now? | `agent-run logs <name> --follow` |
+| How is it going, and what is it costing? | `agent-run stat <name> [--json]` |
+| Show me everything at once | `agent-run monitor` |
+
+`stat` reports agent state, elapsed time, tokens the runtime has reported using,
+and a resource sample — cpu, **memory**, disk, network, io. Memory leads because
+exe.dev's own `stat` table omits it, and memory is what actually kills a build on
+an 8GB box; it is flagged at 90% and above.
+
+`monitor` builds a tmux session with one window per run plus a `resources.`
+window looping `stat` over all of them. The trailing dot keeps that name outside
+the space of valid run names, so it cannot be shadowed or pruned.
+
+Tokens come from the runtime's own output, so they are available in task mode and
+not in `--interactive`, which captures no log by design.
+
 ## Choosing a sandbox
 
 `agent-run run --sandbox` is the one call the operator makes consciously. Each

@@ -904,3 +904,59 @@ class InteractiveAndShellTests(RunStateTestCase):
         message = str(ctx.exception)
         self.assertIn("--interactive", message)
         self.assertIn("agent-run shell", message)
+
+
+class StatTests(RunStateTestCase):
+    def test_format_leads_with_memory_and_flags_pressure(self):
+        # exe.dev's own stat table omits memory, and memory is what kills a
+        # build on an 8GB box.
+        lines = "\n".join(agent_run.format_stat({
+            "cpu_cores": 2.0, "cpu_nominal": 4,
+            "mem_used_bytes": 8_350_076_928, "mem_total_bytes": 8_589_934_592,
+            "fs_used_gb": 5.5, "fs_total_gb": 53.7,
+        }))
+        self.assertIn("memory", lines)
+        self.assertIn("tight", lines)
+        self.assertIn("cpu", lines)
+
+    def test_no_pressure_flag_when_memory_is_comfortable(self):
+        lines = "\n".join(agent_run.format_stat({
+            "mem_used_bytes": 2_000_000_000, "mem_total_bytes": 8_589_934_592,
+        }))
+        self.assertNotIn("tight", lines)
+
+    def test_latest_sample_wins_regardless_of_order(self):
+        payload = json.dumps({"points": [
+            {"timestamp": "2026-08-14T12:10:26Z", "cpu_cores": 3},
+            {"timestamp": "2026-08-14T06:28:35Z", "cpu_cores": 1},
+        ]})
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(stdout=payload)):
+            self.assertEqual(agent_run.latest_stat("vm")["cpu_cores"], 3)
+
+    def test_unreadable_metrics_are_not_faked(self):
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(returncode=1)):
+            self.assertIsNone(agent_run.latest_stat("vm"))
+
+    def test_tokens_read_the_last_total_the_runtime_printed(self):
+        log = "tokens used\n9,031\nmore work\ntokens used\n36,756\n"
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: completed(stdout=log)):
+            self.assertEqual(agent_run.agent_tokens({"vm": "v", "agent_log": "~/x"}), 36756)
+
+
+class ResourcesWindowTests(unittest.TestCase):
+    def test_resources_window_survives_a_refresh(self):
+        # It is not a run, so a naive prune would close it every time.
+        add, kill = agent_run.plan_monitor_windows(
+            ["a", agent_run.RESOURCES_WINDOW], ["a", agent_run.RESOURCES_WINDOW]
+        )
+        self.assertEqual((add, kill), ([], []))
+
+    def test_resources_window_name_cannot_collide_with_a_run(self):
+        # Run names come from --name, which the schema restricts to [a-z0-9-].
+        self.assertIn(".", agent_run.RESOURCES_WINDOW)
+
+    def test_resources_command_loops_over_every_run(self):
+        command = agent_run.resources_cmd(["alpha", "beta"])
+        self.assertIn("stat alpha", command)
+        self.assertIn("stat beta", command)
+        self.assertIn("while true", command)

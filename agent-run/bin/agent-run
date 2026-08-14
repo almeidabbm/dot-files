@@ -843,6 +843,85 @@ def cmd_attach(args):
     os.execvp(argv[0], argv)  # hands the terminal to tmux
 
 
+# Codex prints a running total in its output; it is the cheapest progress and
+# cost signal available without asking the provider anything.
+TOKENS_RE = re.compile(r"tokens used\s+([\d,]+)")
+
+
+def latest_stat(vm, time_range="24h"):
+    """The most recent metrics sample for a VM, or None if unreadable."""
+    result = sh(["ssh", *SSH_BATCH_OPTS, "exe.dev", "stat", vm, "--json", f"--range={time_range}"], check=False)
+    if result.returncode != 0:
+        return None
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    points = payload.get("points") or []
+    if not points:
+        return None
+    return max(points, key=lambda p: p.get("timestamp", ""))
+
+
+def agent_tokens(record):
+    """Tokens the runtime reports having used so far, or None."""
+    log = record.get("agent_log", AGENT_LOG_REMOTE)
+    result = vm_exec(record["vm"], f"tail -n 400 {log}", check=False)
+    matches = TOKENS_RE.findall(result.stdout or "")
+    return int(matches[-1].replace(",", "")) if matches else None
+
+
+def format_stat(point):
+    """Compact resource lines, memory included.
+
+    exe.dev's own `stat` table omits memory, and memory is what actually kills
+    a build on an 8GB box, so it leads here.
+    """
+    lines = []
+    cores, nominal = point.get("cpu_cores"), point.get("cpu_nominal")
+    if cores is not None and nominal:
+        lines.append(f"  cpu     {cores:.2f} / {nominal} cores ({cores / nominal * 100:.0f}%)")
+    used, total = point.get("mem_used_bytes"), point.get("mem_total_bytes")
+    if used and total:
+        pct = used / total * 100
+        flag = "  <-- tight" if pct >= 90 else ""
+        lines.append(f"  memory  {used / 2**30:.1f} / {total / 2**30:.1f} GiB ({pct:.0f}%){flag}")
+    fs_used, fs_total = point.get("fs_used_gb"), point.get("fs_total_gb")
+    if fs_used and fs_total:
+        lines.append(f"  disk    {fs_used:.1f} / {fs_total:.1f} GB ({fs_used / fs_total * 100:.0f}%)")
+    rx, tx = point.get("network_rx_mbps", 0), point.get("network_tx_mbps", 0)
+    ior, iow = point.get("io_read_mbps", 0), point.get("io_write_mbps", 0)
+    lines.append(f"  net     rx {rx:.2f} / tx {tx:.2f} Mbps")
+    lines.append(f"  io      read {ior:.2f} / write {iow:.2f} Mbps")
+    return lines
+
+
+def cmd_stat(args):
+    record = load_run(args.name)
+    if record["status"] == "deleted":
+        raise RunError(f"run '{args.name}' is deleted; its VM and metrics are gone")
+
+    state = agent_state(record)
+    point = latest_stat(record["vm"], args.range)
+    tokens = agent_tokens(record) if record.get("started_at") else None
+
+    if args.json:
+        print(json.dumps({"name": record["name"], "agent": state, "tokens": tokens, "sample": point}, indent=2))
+        return
+
+    print(f"{record['name']}: {state}")
+    if record.get("started_at"):
+        print(f"  started {record['started_at']}")
+    if tokens is not None:
+        print(f"  tokens  {tokens:,}")
+    if point:
+        print(f"  sample  {point.get('timestamp', '?')}")
+        for line in format_stat(point):
+            print(line)
+    else:
+        print("  (no metrics available)")
+
+
 def cmd_shell(args):
     """An interactive shell on the VM, with no agent involved."""
     record = load_run(args.name)
@@ -871,6 +950,10 @@ def cmd_monitor(args):
         print("no live runs to monitor; dispatch one with 'agent-run dispatch'")
         return
 
+    # The resources window is part of the dashboard, so it must be wanted too
+    # or the prune step would remove it on every refresh.
+    wanted = wanted + [RESOURCES_WINDOW]
+
     exists = sh(["tmux", "has-session", "-t", session], check=False).returncode == 0
     if not exists:
         sh(["tmux", "new-session", "-d", "-s", session, "-n", wanted[0], follow_cmd(wanted[0])])
@@ -886,12 +969,14 @@ def cmd_monitor(args):
         existing = [w for w in listed.stdout.split() if w]
 
     add, kill = plan_monitor_windows(existing, wanted)
+    runs = [n for n in wanted if n != RESOURCES_WINDOW]
     for name in add:
-        sh(["tmux", "new-window", "-d", "-t", session, "-n", name, follow_cmd(name)])
+        command = resources_cmd(runs) if name == RESOURCES_WINDOW else follow_cmd(name)
+        sh(["tmux", "new-window", "-d", "-t", session, "-n", name, command])
     for name in kill:
         sh(["tmux", "kill-window", "-t", f"{session}:{name}"], check=False)
 
-    print(f"{session}: {len(wanted)} run(s) — {', '.join(wanted)}")
+    print(f"{session}: {len(runs)} run(s) — {', '.join(runs)}")
     if add:
         print(f"  opened:  {', '.join(add)}")
     if kill:
@@ -902,6 +987,17 @@ def cmd_monitor(args):
 def follow_cmd(name):
     """The command a dashboard window runs: this tool, following one run."""
     return f"{shlex.quote(str(pathlib.Path(__file__).resolve()))} logs {shlex.quote(name)} --follow"
+
+
+# A window name no run can shadow, because run names cannot contain a dot.
+RESOURCES_WINDOW = "resources."
+
+
+def resources_cmd(names, interval=15):
+    """A window that keeps every run's progress and resource use on screen."""
+    me = shlex.quote(str(pathlib.Path(__file__).resolve()))
+    stats = "; ".join(f"{me} stat {shlex.quote(n)}" for n in names)
+    return f"while true; do clear; {stats}; sleep {interval}; done"
 
 
 def cmd_rm(args):
@@ -996,6 +1092,12 @@ def main():
     p = sub.add_parser("attach", help="attach to a run's tmux session to drive it directly")
     p.add_argument("name")
     p.set_defaults(func=cmd_attach)
+
+    p = sub.add_parser("stat", help="show a run's agent progress and VM resource usage")
+    p.add_argument("name")
+    p.add_argument("--range", default="24h", choices=("24h", "7d", "30d"), help="metrics window")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.set_defaults(func=cmd_stat)
 
     p = sub.add_parser("shell", help="open an interactive shell on a run's VM, with no agent")
     p.add_argument("name")
