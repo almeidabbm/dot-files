@@ -81,9 +81,9 @@ flowchart TD
 
 Claude uses the shared workflow rules from [`.ai/shared-instructions.md`](.ai/shared-instructions.md), symlinked into Claude's native `~/.claude/CLAUDE.md` location by `link-claude.sh`.
 
-**Shared rules** enforce:
+**Shared rules** cover:
 
-- Branch management with **GitHub native stacked PRs** (`gh stack`) — with plain-`git` fallbacks where stacking isn't available
+- Branch management with **GitHub native stacked PRs** (`gh stack`) — with plain-`git` fallbacks where stacking isn't available, and the stack kept rebased on current trunk
 - **Git worktrees** inside the repo (`.worktrees/`, gitignored) for parallel work
 - Auto-decomposition of features into **stacked PRs**
 - **Conventional commits** and **scoped testing** (only runs tests for changed files)
@@ -133,7 +133,7 @@ The shared rules and `.ai/skills/` are identical everywhere.
 
 ### Enforcement
 
-This layer instructs agents; it does not enforce against them. Everything under `.ai/` is advisory, including the branching rules. Enforcement of trunk protection belongs to each repository — branch protection rules, required reviews, CI — where it covers every contributor rather than only the machines running these dotfiles.
+This layer instructs agents; it does not enforce against them, and it carries no branch policy of its own. Which branches may be written to belongs to each repository — its `AGENTS.md`/`CLAUDE.md`, its branch protection rules, its required reviews, its CI — where the policy covers every contributor rather than only the machines running these dotfiles. The shared rules cover how to work a stack, not what a repository permits.
 
 ---
 

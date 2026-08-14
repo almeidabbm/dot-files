@@ -2,11 +2,11 @@
 
 ## Git & Branching
 
-- Never commit directly to `main` or trunk. Before making any commits, check the current branch with `git branch --show-current`. If you are on `main`, create a branch first.
 - Use GitHub's native stacked pull requests (`gh stack`) for branch management whenever the repo supports it; fall back to plain `git` plus `gh pr` when it does not.
 - Use `gh stack init <branch-name>` to start a stack and `gh stack add -m "message" <branch-name>` for each layer on top. Use `git checkout -b branch-name` for standalone work or as the fallback.
-- Never push or force-push to `main` or trunk directly. Pushing feature/stacked branches and submitting PRs (`git push`, `gh stack submit`) is fine and does not require asking first.
-- Always sync trunk before starting new work: `gh stack sync` when inside a stack, otherwise `git fetch origin && git checkout main && git pull --rebase`.
+- Pushing feature and stacked branches and submitting PRs (`git push`, `gh stack submit`) is fine and does not require asking first.
+- Keep the stack rebased on current trunk: before starting new work, and again whenever trunk moves. Use `gh stack sync` inside a stack, otherwise `git fetch origin` and rebase the branch onto `origin/<trunk>`.
+- Each repository owns its own branch policy. Follow the rules the repository states — in its `AGENTS.md`/`CLAUDE.md`, its branch protection, or its CI — rather than assuming a policy it has not written down.
 
 ## Stacked Pull Requests
 
