@@ -706,6 +706,10 @@ def cmd_monitor(args):
     exists = sh(["tmux", "has-session", "-t", session], check=False).returncode == 0
     if not exists:
         sh(["tmux", "new-session", "-d", "-s", session, "-n", wanted[0], follow_cmd(wanted[0])])
+        # A dashboard whose windows vanish when their stream ends is useless:
+        # the last one closing takes the session, and the view, with it. Keep
+        # dead panes so a finished agent's final output stays readable.
+        sh(["tmux", "set-option", "-t", session, "remain-on-exit", "on"], check=False)
         existing = [wanted[0]]
     else:
         listed = sh(

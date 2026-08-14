@@ -612,3 +612,28 @@ class SandboxAcrossRuntimesTests(unittest.TestCase):
 
     def test_both_runtimes_cover_every_declared_mode(self):
         self.assertEqual(set(agent_run.CLAUDE_PERMISSION_MODE), set(agent_run.SANDBOX_MODES))
+
+
+class MonitorSessionTests(RunStateTestCase):
+    def test_new_dashboard_keeps_windows_after_their_stream_ends(self):
+        # Without remain-on-exit the last finished window closes the session,
+        # taking the whole dashboard with it.
+        agent_run.save_run(
+            {"name": "a", "vm": "a", "runtime": "codex", "status": "ready",
+             "created_at": "2026-08-14T05:00:00Z"}
+        )
+        calls = []
+
+        def fake_sh(args, input_text=None, check=True):
+            calls.append(args)
+            # has-session fails -> the session must be created
+            return completed(returncode=1) if args[1] == "has-session" else completed()
+
+        with mock.patch.object(agent_run.shutil, "which", return_value="/usr/bin/tmux"):
+            with mock.patch.object(agent_run, "sh", fake_sh), mock.patch("builtins.print"):
+                agent_run.cmd_monitor(argparse.Namespace(session="dash"))
+
+        self.assertTrue(
+            any(a[:2] == ["tmux", "set-option"] and "remain-on-exit" in a for a in calls),
+            "dashboard session must set remain-on-exit",
+        )
