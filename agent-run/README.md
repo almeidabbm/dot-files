@@ -25,6 +25,7 @@ Requires `python3` with `pyyaml` and `jsonschema`. Invoke it as
 flowchart TD
     tpl["template.yaml + TASK.md"] --> vc["validate / compile<br/>schema check, render setup script<br/>(no provider call)"]
     vc --> disp["dispatch<br/>create VM, poll until<br/>~/work/.agent-run-ready parses as a timestamp"]
+    disp -.->|"mid-dispatch, only when<br/>the template declares secrets:"| sec["deliver<br/>first boot blocks before its clones;<br/>push the values and the installer,<br/>then unblock it"]
     disp --> auth["only when the template has no<br/>configure-llm-integration step:<br/>authenticate the runtime on the VM"]
     auth --> run["run<br/>push runner.sh, start tmux session 'agent'<br/>agent runs in the foreground of that session"]
     run --> obs["logs · attach · monitor<br/>tail ~/work/agent.log, drive the tmux session,<br/>local dashboard with one window per run"]
@@ -41,11 +42,15 @@ Run records are machine-local JSON under `~/.local/state/agent-run/runs/`
 
 ### validate
 
-Schema check plus the forbidden-env check. Touches no provider.
+Schema check, repo checks, and the forbidden-env check. Touches no provider.
+Reports the compiled setup script against exe.dev's 10 KiB cap, per runtime, so
+a template creeping toward the limit says so while there is still room to act.
 
 ```sh
 agent-run/bin/agent-run validate agent-run/templates/lightdash-dev.yaml
 # agent-run/templates/lightdash-dev.yaml: valid
+#   setup script (codex): 1606 / 10240 bytes (16%)
+#   setup script (claude): 1572 / 10240 bytes (15%)
 ```
 
 ### compile
@@ -68,9 +73,10 @@ VM traceable back to the template that produced it.
 
 ### dispatch
 
-Compile, create the VM, poll for the readiness marker, optionally push the
-prompt, save the run record. Safe to run in parallel under different `--name`s;
-a name with a live record is refused.
+Resolve any declared secrets, compile, create the VM, deliver those secrets, poll
+for the readiness marker, optionally push the prompt, save the run record. Safe
+to run in parallel under different `--name`s; a name with a live record is
+refused.
 
 ```sh
 agent-run/bin/agent-run dispatch agent-run/templates/lightdash-dev.yaml \
@@ -80,15 +86,29 @@ agent-run/bin/agent-run dispatch agent-run/templates/lightdash-dev.yaml \
 # prompt copied to ~/work/TASK.md                            [stderr]
 # task-a: ready (u123@task-a.exe.xyz)
 #
-# next, the human-only part:
-#   ssh -t exe.dev ssh task-a
-#   codex login --device-auth
-#   ...
+# next:
+#   agent-run run task-a --prompt-file <task.md>
+#   agent-run logs task-a --follow
+```
+
+That is the output for a template carrying `configure-llm-integration`, which is
+every shipped one. Without that step the runtime has no model access, and
+`dispatch` prints the login to run on the VM instead — subscription login is
+deliberately not automated.
+
+A template that declares `secrets:` adds two lines before the VM exists and one
+after, because delivery is a [handshake](#how-it-gets-there):
+
+```text
+# resolved 1 secret(s): GITHUB_TOKEN                          [stderr]
+# creating VM: ...                                            [stderr]
+# delivered 1 secret(s); boot resumed                          [stderr]
 ```
 
 `--no-wait` returns as soon as the VM exists; `agent-run status` promotes the
-record to `ready` when the marker appears. Subscription login is deliberately
-not automated — `dispatch` stops at ready and prints the steps.
+record to `ready` when the marker appears. It is refused for a template with
+`secrets:`, whose first boot is blocked waiting for a delivery that returning
+early would never make.
 
 ### run
 
@@ -185,6 +205,18 @@ agent-run/bin/agent-run rm task-a          # asks first
 agent-run/bin/agent-run rm task-a --yes    # for scripts
 ```
 
+### secret
+
+Registers the command that fetches a credential, so a template can name it
+without holding it. Touches no provider. Full treatment in
+[Credentials](#credentials).
+
+```sh
+agent-run/bin/agent-run secret set GITHUB_TOKEN --command 'gh auth token'
+agent-run/bin/agent-run secret ls
+agent-run/bin/agent-run secret rm GITHUB_TOKEN
+```
+
 ## Template contract
 
 `templates/schema.json` is the authority; this is the shape it accepts.
@@ -198,13 +230,15 @@ repos:
   - id: github.com/lightdash/lightdash   # host/owner/repo
     ref: main
     path: lightdash            # checkout dir under $HOME/work
-    role: primary              # where the agent starts; first repo if unset
+    role: primary              # where the agent starts
+    private: true              # clone via github.int.exe.xyz
+    setup:                     # runs inside this checkout; takes no cwd
+      - run: pnpm install --frozen-lockfile
 env:
   NODE_ENV: development        # plaintext on the VM — non-secret config only
-setup:
+setup:                         # template-wide: provisions the box, runs first
   - update-runtimes            # named step: updates only the selected runtime
-  - run: corepack enable && pnpm install
-    cwd: lightdash
+  - run: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 checks:                        # each must exit 0 before the marker is written
   - node --version
 providers:                     # the only place provider specifics may appear
@@ -214,13 +248,165 @@ providers:                     # the only place provider specifics may appear
     tags: [agent-pilot]
 ```
 
-The generated first-boot script clones the repos, runs the setup steps, runs the
-checks, then writes `date -u +%FT%TZ` into `$HOME/work/.agent-run-ready`. That
-marker is the readiness contract.
+The generated first-boot script clones the repos, writes the manifest, runs each
+repo's own setup steps, runs the template-wide setup steps, runs the checks, then
+writes `date -u +%FT%TZ` into `$HOME/work/.agent-run-ready`. That marker is the
+readiness contract.
+
+## Several repos on one box
+
+`repos` is a list, and everything above scales to it. Two rules are enforced at
+validate time rather than left to fail on the VM:
+
+| Rule | Why |
+| --- | --- |
+| No two repos may resolve to the same checkout directory | Both would clone to `$WORK/<name>` and the second would fail deep in the setup journal, long after dispatch reported success. Give all but one an explicit `path:` |
+| With more than one repo, exactly one must be `role: primary` | It decides where the agent starts. With no marker the choice falls to declaration order, which is an accident rather than a decision. A single-repo template needs no marker |
+
+Each repo may carry its own `setup:` block, which runs with that checkout as the
+working directory. Ordering is:
+
+```text
+clones -> REPOS.md -> template-wide setup -> per-repo setup -> checks
+```
+
+The split is machine-level versus repo-level. The template-wide list provisions
+the box — the language runtime, the package manager, `configure-llm-integration`
+— and a repo's own `pnpm install` is exactly the thing that depends on it, so
+per-repo steps run last. Anything that has to happen *before* a repo's own steps
+belongs in the template-wide list.
+
+The script also writes `$HOME/work/REPOS.md`, a table of what was cloned, where,
+at which ref, and which one is primary:
+
+```markdown
+| Path | Repository | Ref | Role |
+| --- | --- | --- | --- |
+| `~/work/lightdash` | github.com/lightdash/lightdash | main | primary |
+| `~/work/dot-files` | github.com/almeidabbm/dot-files | (default) | secondary |
+```
+
+Without it the only repo an agent is told about is the one it starts in, so every
+other checkout is something it has to stumble across. Point at it from `TASK.md`
+when a task genuinely spans repositories.
 
 Two size limits apply: the setup script must stay under 10 KiB (exe.dev's cap)
 and a pushed file such as `TASK.md` under 96 KiB. Anything larger belongs in a
-repo the template clones.
+repo the template clones. `validate` reports the first of these as a percentage,
+so a template approaching it says so before a dispatch fails.
+
+A template may also declare `secrets:` and a repo may set `auth:`; both are
+covered under [Credentials](#credentials).
+
+## Credentials
+
+Prefer an exe.dev integration wherever one exists: the credential is injected at
+the network layer and is genuinely never on the VM. `secrets:` is for what
+integrations cannot cover — a PAT for a host exe.dev has no integration with, a
+registry token, a fine-grained token scoped more tightly than the integration.
+
+### Registering one
+
+The local store holds **resolver commands, never values**. Nothing secret is
+written to your disk by `agent-run`, and rotating a credential at its source
+needs no action here.
+
+```sh
+agent-run secret set GITHUB_TOKEN --command 'gh auth token'
+agent-run secret set NPM_TOKEN --command 'op read op://private/npm/token'
+
+agent-run secret ls
+# GITHUB_TOKEN             ok     gh auth token
+# NPM_TOKEN                FAILS  op read op://private/npm/token
+```
+
+The command is stored, so it must *fetch* the credential rather than contain it.
+`--command 'echo ghp_…'` writes the value straight back to disk; `set` warns when
+a command looks like that.
+
+### Declaring one in a template
+
+```yaml
+secrets:
+  - name: GITHUB_TOKEN         # must match a registered name
+    type: git-credential
+    host: github.com
+    username: x-access-token   # optional; this is the default, what a PAT expects
+  - name: NPM_TOKEN
+    type: file
+    path: .npmrc               # relative to $HOME, written 0600
+    format: "//registry.npmjs.org/:_authToken={{value}}"
+
+repos:
+  - id: github.com/org/private-thing
+    role: primary
+    auth: GITHUB_TOKEN         # clone with this credential
+```
+
+`auth:` and `private:` are two different routes to the same repo — the gateway
+versus a credential — so a repo may set one, not both. A credential whose `host`
+does not match the repo's is refused at validate time: git's store helper matches
+on host, so it would never be offered and the clone would sit waiting for a
+password nobody can type.
+
+### How it gets there
+
+The token cannot ride the setup script — that runs under `set -euxo pipefail`, so
+anything it touched would be echoed into the journal `logs --source setup` prints.
+It cannot ride `--env` either, which is provider metadata and the agent's own
+environment. So first boot pauses and dispatch fills the gap:
+
+```mermaid
+sequenceDiagram
+    participant D as dispatch (your machine)
+    participant B as first boot (the VM)
+    D->>D: resolve every secret locally, before creating anything
+    D->>B: create VM
+    B->>B: mkdir ~/.agent-run/secrets (0700)
+    B-->>D: touch ~/work/.agent-run-awaiting-secrets
+    B->>B: block, polling for .complete
+    D->>B: push each value (0600) then install-secrets.sh
+    D->>B: touch .complete
+    B->>B: set +x; bash install-secrets.sh; set -x
+    B->>B: clone, setup, checks, write .agent-run-ready
+```
+
+Resolution happens before the VM exists on purpose: an unregistered secret found
+later would leave a box whose boot script is already blocked waiting for it. For
+the same reason `--no-wait` is refused for a template that declares secrets.
+
+`install-secrets.sh` is generated from the declarations alone and contains no
+value — it reads each one from the file dispatch pushed. It runs `set -eu` with
+tracing deliberately absent.
+
+### What this does and does not protect
+
+| The credential is kept out of | How |
+| --- | --- |
+| The template, and therefore git | `secrets:` carries names; a test asserts no shipped template holds a credential-shaped value |
+| Your disk | The store holds the resolver command, not its output |
+| The creation command line and VM metadata | It is never an `--env`; token-shaped `env` names are refused with a pointer here |
+| The setup journal | Delivered after boot starts, installed by a script that never enables tracing |
+| The run record | The record stores secret names only |
+| The agent's environment | Installed into files git reads, never exported |
+| `.git/config` | An `auth:` repo clones from the ordinary URL; the credential comes from the store helper, matched on host |
+
+**It is not out of the agent's reach, and this is not a bug you can fix.** The
+agent has a shell on that VM and runs as the user that owns `~/.git-credentials`.
+Anything git can read, an agent that goes looking can read. The VM stays the real
+boundary, which means:
+
+- Scope the token to what the task needs — a fine-grained, read-only PAT for one
+  repo, not a classic token with `repo` scope.
+- Prefer an exe.dev integration when one exists. Nothing above beats a credential
+  that was never on the box.
+- Delete the VM when the evidence is captured. `agent-run rm` is the control that
+  actually bounds exposure.
+
+One more honest limit: the value transits the exe.dev gateway base64-encoded in a
+command line, because the gateway forwards no stdin and there is no other channel.
+Base64 is not encryption. exe.dev sees it in transit, and delivery happens before
+any agent is started, so nothing on the VM is running to observe it.
 
 ## Security model
 
@@ -229,7 +415,8 @@ repo the template clones.
 | No provider API key ever reaches a VM                     | `load_template` rejects `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` in `env` (`FORBIDDEN_ENV`) |
 | Model access is credential-free on the VM                 | Traffic rides the exe.dev LLM integration gateway (`llm.int.exe.xyz`); the credential is injected at the network layer and is never readable on the VM |
 | Repo access is scoped to the repos you asked for          | A repo-scoped GitHub integration via `github.int.exe.xyz`, selected by `integrations: [github]`; without it, public repos clone anonymously from `https://<host>/…` |
-| `env` carries configuration, not secrets                  | Template `env` becomes `--env=K=V` on the creation command and is plaintext on the VM  |
+| `env` carries configuration, not secrets                  | Template `env` becomes `--env=K=V` on the creation command and is plaintext on the VM; token-shaped names are refused outright |
+| A credential you must supply yourself stays off your disk | `secrets:` names it, `agent-run secret` stores the command that fetches it, and delivery happens after boot — see [Credentials](#credentials) |
 | Secrets stay out of the repo                              | Templates are committed; run records, prompts, and credentials are not                |
 
 Agent authentication normally needs no human at all: the
@@ -348,6 +535,11 @@ Each of these is a fact about exe.dev that the tool is shaped around.
 | Agent cannot create a branch or commit                       | `workspace-write` keeps `.git` read-only                  | Re-run with `--sandbox danger-full-access`                                |
 | `an agent is already running`                                | A live tmux session on that VM                            | `agent-run attach <name>`, or `agent-run run <name> --force`              |
 | Dropped into a REPL after `ssh <vm>.exe.xyz`                 | Direct routing is unreliable                              | `ssh -t exe.dev ssh <vm>`                                                 |
+| `env looks like it carries a credential`                     | A token-shaped name in `env:`                             | Declare it under `secrets:` and register it with `agent-run secret set`   |
+| `no secret named 'X'`                                        | The template declares it; this machine has not registered it | `agent-run secret set X --command '<command that prints it>'`          |
+| `VM never asked for its secrets`                             | Boot failed before the handshake, or the image has no `~/.agent-run` | `agent-run logs <name> --source setup`                          |
+| `secrets never arrived after 600s` in the setup log          | Dispatch was interrupted between creating the VM and delivering | `agent-run rm <name>` and dispatch again; the VM cannot be resumed  |
+| Clone of an `auth:` repo asks for a password                 | The credential's `host` does not match the repo's, or the token lacks access | Check `secrets:` `host`, then the token's scopes         |
 
 ## Adding a provider
 

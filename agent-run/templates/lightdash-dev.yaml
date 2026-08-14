@@ -20,6 +20,11 @@ repos:
     path: lightdash
     role: primary
     private: true
+    setup:
+      # The monorepo install is the slow part of readiness. Give dispatch a
+      # generous --wait-timeout for this template. It runs after the
+      # template-wide steps below, so node and pnpm already exist.
+      - run: pnpm install --frozen-lockfile
 
 env:
   NODE_ENV: development
@@ -35,11 +40,6 @@ setup:
       sudo apt-get install -y nodejs
       sudo corepack enable
       corepack prepare pnpm@latest --activate
-
-  # The monorepo install is the slow part of readiness. Give dispatch a
-  # generous --wait-timeout for this template.
-  - run: pnpm install --frozen-lockfile
-    cwd: lightdash
 
 checks:
   - git --version

@@ -22,6 +22,7 @@ loader.exec_module(agent_run)
 
 # Compiler tests use a fixture, so evolving a real template cannot break them.
 TEMPLATE = ROOT / "tests" / "fixtures" / "example.yaml"
+MULTI_REPO = ROOT / "tests" / "fixtures" / "multi-repo.yaml"
 
 
 def write_yaml(content):
@@ -146,6 +147,461 @@ class CompileTests(unittest.TestCase):
         self.assertIn("https://github.int.exe.xyz/lightdash/lightdash.git", script)
 
 
+class MultiRepoTests(unittest.TestCase):
+    def compile(self, template=None):
+        template = template or agent_run.load_template(MULTI_REPO)
+        return agent_run.compile_exe_dev(template, "codex", "multi")
+
+    def test_colliding_checkout_paths_are_refused(self):
+        # Both would clone to "$WORK/api" and the second would fail deep in the
+        # setup journal, long after dispatch reported success.
+        path = write_yaml(
+            "version: 1\nname: collide\nruntimes: [codex]\nrepos:\n"
+            "  - id: github.com/org-a/api\n    role: primary\n"
+            "  - id: github.com/org-b/api\n"
+        )
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.load_template(path)
+        message = str(ctx.exception)
+        self.assertIn("github.com/org-a/api", message)
+        self.assertIn("github.com/org-b/api", message)
+        self.assertIn("path:", message)
+
+    def test_an_explicit_path_resolves_a_collision(self):
+        path = write_yaml(
+            "version: 1\nname: fine\nruntimes: [codex]\nrepos:\n"
+            "  - id: github.com/org-a/api\n    role: primary\n"
+            "  - id: github.com/org-b/api\n    path: api-b\n"
+        )
+        self.assertEqual(len(agent_run.load_template(path)["repos"]), 2)
+
+    def test_several_repos_with_no_primary_are_refused(self):
+        # Otherwise the agent starts in whichever repo happens to be declared
+        # first, which is an ordering accident rather than a decision.
+        path = write_yaml(
+            "version: 1\nname: nohome\nruntimes: [codex]\nrepos:\n"
+            "  - id: github.com/o/a\n  - id: github.com/o/b\n"
+        )
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.load_template(path)
+        self.assertIn("role: primary", str(ctx.exception))
+
+    def test_two_primaries_are_refused(self):
+        path = write_yaml(
+            "version: 1\nname: twohomes\nruntimes: [codex]\nrepos:\n"
+            "  - id: github.com/o/a\n    role: primary\n"
+            "  - id: github.com/o/b\n    role: primary\n"
+        )
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.load_template(path)
+        self.assertIn("only one repo", str(ctx.exception))
+
+    def test_a_single_repo_still_needs_no_primary_marker(self):
+        # The fallback stays safe precisely because ambiguity is refused above.
+        path = write_yaml(
+            "version: 1\nname: solo\nruntimes: [codex]\nrepos:\n  - id: github.com/o/only\n"
+        )
+        template = agent_run.load_template(path)
+        self.assertEqual(agent_run.primary_workdir(template), "~/work/only")
+
+    def test_every_repo_is_cloned(self):
+        _, script = self.compile()
+        self.assertIn('https://github.int.exe.xyz/lightdash/lightdash.git "$WORK"/lightdash', script)
+        self.assertIn('https://github.com/almeidabbm/dot-files.git "$WORK"/dot-files', script)
+
+    def test_per_repo_steps_run_in_their_own_checkout(self):
+        _, script = self.compile()
+        self.assertIn('( cd "$WORK"/lightdash && pnpm install --frozen-lockfile )', script)
+        self.assertIn('( cd "$WORK"/dot-files && python3 -m pip install --user jsonschema pyyaml )', script)
+
+    def test_template_wide_steps_precede_the_per_repo_ones(self):
+        # The template-wide list is machine-level provisioning; a repo's own
+        # install is the thing that depends on it, so it cannot run first.
+        _, script = self.compile()
+        self.assertLess(
+            script.index("echo cross-repo step"),
+            script.index("pnpm install --frozen-lockfile"),
+        )
+
+    def test_per_repo_steps_precede_the_checks(self):
+        _, script = self.compile()
+        self.assertLess(
+            script.index("pnpm install --frozen-lockfile"),
+            script.index("git --version"),
+        )
+
+    def test_clones_precede_every_setup_step(self):
+        _, script = self.compile()
+        self.assertLess(
+            script.index('"$WORK"/dot-files\n'),  # the clone, not the cd
+            script.index("pnpm install --frozen-lockfile"),
+        )
+
+
+class ManifestTests(unittest.TestCase):
+    def manifest(self):
+        _, script = agent_run.compile_exe_dev(agent_run.load_template(MULTI_REPO), "codex", "m")
+        body = script.split("<<'REPOSMD'\n", 1)[1].split("\nREPOSMD", 1)[0]
+        return body
+
+    def test_manifest_lists_every_checkout_with_its_repo(self):
+        body = self.manifest()
+        self.assertIn("`~/work/lightdash` | github.com/lightdash/lightdash", body)
+        self.assertIn("`~/work/dot-files` | github.com/almeidabbm/dot-files", body)
+
+    def test_manifest_marks_exactly_one_primary(self):
+        rows = [l for l in self.manifest().splitlines() if l.startswith("| `~/work/")]
+        primary = [r for r in rows if r.endswith("| primary |")]
+        self.assertEqual(len(primary), 1)
+        self.assertIn("github.com/lightdash/lightdash", primary[0])
+
+    def test_manifest_names_a_repo_with_no_ref(self):
+        # An unpinned checkout is on the remote's default branch; saying so beats
+        # an empty cell the agent has to interpret.
+        self.assertIn("| (default) |", self.manifest())
+
+    def test_manifest_is_a_quoted_heredoc_so_set_x_cannot_echo_it(self):
+        _, script = agent_run.compile_exe_dev(agent_run.load_template(MULTI_REPO), "codex", "m")
+        self.assertIn("<<'REPOSMD'", script)
+
+    def test_single_repo_template_still_gets_a_manifest(self):
+        _, script = agent_run.compile_exe_dev(agent_run.load_template(TEMPLATE), "codex", "m")
+        self.assertIn("REPOS.md", script)
+        self.assertIn("| primary |", script)
+
+
+class RunStateTestCase(unittest.TestCase):
+    """Base class giving each test an isolated state root."""
+
+    def setUp(self):
+        self.state_dir = tempfile.TemporaryDirectory()
+        self.env = mock.patch.dict(os.environ, {"AGENT_RUN_STATE_PATH": self.state_dir.name})
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        self.addCleanup(self.state_dir.cleanup)
+
+
+SECRETS_TEMPLATE = """version: 1
+name: sec
+runtimes: [codex]
+secrets:
+  - name: GITHUB_TOKEN
+    type: git-credential
+    host: github.com
+  - name: NPM_TOKEN
+    type: file
+    path: .npmrc
+    format: "//registry.npmjs.org/:_authToken={{value}}"
+repos:
+  - id: github.com/o/private-thing
+    role: primary
+    auth: GITHUB_TOKEN
+"""
+
+# Distinctive enough that finding it anywhere is unambiguous.
+FAKE_TOKEN = "ghp_TESTTOKENVALUE0000000000000000000000"
+
+
+def token_source(value=FAKE_TOKEN, exit_code=0):
+    """A resolver command that fetches the token rather than containing it.
+
+    The command itself is stored config and is printed back by `secret ls`, so a
+    command with the credential baked in would make every leak assertion below
+    vacuous — and is the thing a real user must not do either.
+    """
+    f = tempfile.NamedTemporaryFile("w", delete=False)
+    f.write(value + "\n")
+    f.close()
+    suffix = f"; exit {exit_code}" if exit_code else ""
+    return f"cat {f.name}{suffix}"
+
+
+class SecretDeclarationTests(unittest.TestCase):
+    def test_token_shaped_env_is_refused_and_points_at_secrets(self):
+        # env becomes --env=K=V: provider metadata, and the agent's own環境.
+        for name in ("GITHUB_TOKEN", "NPM_SECRET", "DB_PASSWORD", "SOME_API_KEY"):
+            path = write_yaml(
+                "version: 1\nname: leaky\nruntimes: [codex]\n"
+                f"repos:\n  - id: github.com/a/b\nenv:\n  {name}: value\n"
+            )
+            with self.assertRaises(agent_run.TemplateError) as ctx:
+                agent_run.load_template(path)
+            self.assertIn("secrets:", str(ctx.exception))
+
+    def test_ordinary_env_still_passes(self):
+        path = write_yaml(
+            "version: 1\nname: fine\nruntimes: [codex]\n"
+            "repos:\n  - id: github.com/a/b\nenv:\n  NODE_ENV: development\n"
+        )
+        self.assertEqual(agent_run.load_template(path)["env"], {"NODE_ENV": "development"})
+
+    def test_auth_naming_an_undeclared_secret_is_refused(self):
+        path = write_yaml(
+            "version: 1\nname: undeclared\nruntimes: [codex]\n"
+            "repos:\n  - id: github.com/o/r\n    auth: NOPE\n"
+        )
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.load_template(path)
+        self.assertIn("no 'secrets:' entry declares", str(ctx.exception))
+
+    def test_auth_and_private_together_are_refused(self):
+        # They are two different routes to the same repo; silently preferring
+        # one would make the other look broken.
+        path = write_yaml(
+            SECRETS_TEMPLATE.replace("    auth: GITHUB_TOKEN", "    auth: GITHUB_TOKEN\n    private: true")
+        )
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.load_template(path)
+        self.assertIn("Pick one", str(ctx.exception))
+
+    def test_credential_for_the_wrong_host_is_refused(self):
+        # The store helper matches on host, so this would never be offered and
+        # the clone would sit waiting for a password nobody can type.
+        path = write_yaml(SECRETS_TEMPLATE.replace("host: github.com", "host: gitlab.com"))
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.load_template(path)
+        self.assertIn("matches on host", str(ctx.exception))
+
+    def test_auth_against_a_file_secret_is_refused(self):
+        path = write_yaml(SECRETS_TEMPLATE.replace("auth: GITHUB_TOKEN", "auth: NPM_TOKEN"))
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.load_template(path)
+        self.assertIn("git-credential", str(ctx.exception))
+
+    def test_an_auth_repo_clones_from_the_ordinary_url(self):
+        # A token in the URL would be written into .git/config and survive there.
+        template = agent_run.load_template(write_yaml(SECRETS_TEMPLATE))
+        _, script = agent_run.compile_exe_dev(template, "codex", "x")
+        self.assertIn("https://github.com/o/private-thing.git", script)
+        self.assertNotIn("@github.com/o/private-thing", script)
+
+
+class SecretStoreTests(RunStateTestCase):
+    def test_set_stores_the_command_and_never_the_value(self):
+        agent_run.cmd_secret_set(argparse.Namespace(
+            name="GITHUB_TOKEN", command=token_source()))
+        stored = agent_run.secrets_config_path().read_text()
+        self.assertIn("cat ", stored)
+        self.assertNotIn(FAKE_TOKEN, stored)
+
+    def test_the_store_is_not_world_readable(self):
+        agent_run.cmd_secret_set(argparse.Namespace(name="T", command="echo v"))
+        self.assertEqual(agent_run.secrets_config_path().stat().st_mode & 0o077, 0)
+
+    def test_set_refuses_a_command_that_does_not_work(self):
+        with self.assertRaises(agent_run.RunError):
+            agent_run.cmd_secret_set(argparse.Namespace(name="T", command="exit 3"))
+        self.assertFalse(agent_run.secrets_config_path().exists())
+
+    def test_set_refuses_a_command_that_prints_nothing(self):
+        with self.assertRaises(agent_run.RunError) as ctx:
+            agent_run.cmd_secret_set(argparse.Namespace(name="T", command="true"))
+        self.assertIn("produced nothing", str(ctx.exception))
+
+    def test_a_failing_resolver_never_echoes_its_output(self):
+        # A partially-written credential is still a credential.
+        agent_run.save_secret_config({"T": {"command": token_source(exit_code=1)}})
+        with self.assertRaises(agent_run.RunError) as ctx:
+            agent_run.resolve_secret("T")
+        self.assertNotIn(FAKE_TOKEN, str(ctx.exception))
+
+    def test_multi_line_output_is_refused(self):
+        agent_run.save_secret_config({"T": {"command": "printf 'a\\nb\\n'"}})
+        with self.assertRaises(agent_run.RunError) as ctx:
+            agent_run.resolve_secret("T")
+        self.assertIn("several lines", str(ctx.exception))
+
+    def test_ls_shows_names_and_commands_but_no_values(self):
+        agent_run.save_secret_config({"GITHUB_TOKEN": {"command": token_source()}})
+        with mock.patch("builtins.print") as fake_print:
+            agent_run.cmd_secret_ls(argparse.Namespace())
+        output = "\n".join(str(c.args[0]) for c in fake_print.call_args_list if c.args)
+        self.assertIn("GITHUB_TOKEN", output)
+        self.assertIn("ok", output)
+        self.assertNotIn(FAKE_TOKEN, output)
+
+    def test_ls_reports_a_resolver_that_has_stopped_working(self):
+        agent_run.save_secret_config({"T": {"command": "exit 1"}})
+        with mock.patch("builtins.print") as fake_print:
+            agent_run.cmd_secret_ls(argparse.Namespace())
+        output = "\n".join(str(c.args[0]) for c in fake_print.call_args_list if c.args)
+        self.assertIn("FAILS", output)
+
+    def test_a_literal_resolver_is_warned_about(self):
+        # `--command 'echo hunter2'` puts the value back at rest in the config,
+        # which is the one thing this store exists to avoid.
+        with mock.patch("builtins.print") as fake_print:
+            agent_run.cmd_secret_set(argparse.Namespace(name="T", command="echo hunter2"))
+        output = "\n".join(str(c.args[0]) for c in fake_print.call_args_list if c.args)
+        self.assertIn("credential at rest", output)
+
+    def test_a_fetching_resolver_is_not_warned_about(self):
+        with mock.patch("builtins.print") as fake_print:
+            agent_run.cmd_secret_set(argparse.Namespace(name="T", command=token_source()))
+        output = "\n".join(str(c.args[0]) for c in fake_print.call_args_list if c.args)
+        self.assertNotIn("warning", output)
+
+    def test_unregistered_secret_names_the_fix(self):
+        with self.assertRaises(agent_run.RunError) as ctx:
+            agent_run.resolve_secret("MISSING")
+        self.assertIn("agent-run secret set MISSING", str(ctx.exception))
+
+
+class SecretRenderingTests(unittest.TestCase):
+    def secrets(self):
+        return agent_run.load_template(write_yaml(SECRETS_TEMPLATE))["secrets"]
+
+    def test_the_installer_carries_no_credential(self):
+        script = agent_run.render_install_secrets(self.secrets())
+        self.assertNotIn(FAKE_TOKEN, script)
+        self.assertIn('VALUE="$(cat "$SECRETS"/GITHUB_TOKEN)"', script)
+
+    def test_the_installer_never_turns_on_tracing(self):
+        # The boot script runs under `set -x`; this one must not, or every
+        # expansion lands in the journal that `logs --source setup` prints.
+        script = agent_run.render_install_secrets(self.secrets())
+        self.assertIn("set -eu\n", script)
+        self.assertNotIn("set -x", script)
+        self.assertNotIn("-eux", script)
+
+    def test_git_credentials_is_written_restricted(self):
+        script = agent_run.render_install_secrets(self.secrets())
+        self.assertIn("umask 077", script)
+        self.assertIn('chmod 600 "$HOME"/.git-credentials', script)
+        self.assertIn("credential.helper store", script)
+        self.assertIn('"https://x-access-token:$VALUE@github.com"', script)
+
+    def test_a_file_secret_uses_its_format(self):
+        script = agent_run.render_install_secrets(self.secrets())
+        self.assertIn('"//registry.npmjs.org/:_authToken=$VALUE"', script)
+        self.assertIn('chmod 600 "$HOME"/.npmrc', script)
+
+    def test_the_boot_script_waits_before_it_clones(self):
+        template = agent_run.load_template(write_yaml(SECRETS_TEMPLATE))
+        _, script = agent_run.compile_exe_dev(template, "codex", "x")
+        self.assertLess(
+            script.index(".agent-run-awaiting-secrets"),
+            script.index("git clone"),
+        )
+
+    def test_the_boot_script_turns_tracing_off_around_the_installer(self):
+        template = agent_run.load_template(write_yaml(SECRETS_TEMPLATE))
+        _, script = agent_run.compile_exe_dev(template, "codex", "x")
+        lines = script.splitlines()
+        install = next(i for i, l in enumerate(lines) if "install-secrets.sh" in l)
+        self.assertEqual(lines[install - 1].strip(), "set +x")
+        self.assertEqual(lines[install + 1].strip(), "set -x")
+
+    def test_a_template_with_no_secrets_gains_no_handshake(self):
+        _, script = agent_run.compile_exe_dev(agent_run.load_template(TEMPLATE), "codex", "x")
+        self.assertNotIn("awaiting-secrets", script)
+
+    def test_the_creation_command_never_carries_a_secret(self):
+        template = agent_run.load_template(write_yaml(SECRETS_TEMPLATE))
+        argv, script = agent_run.compile_exe_dev(template, "codex", "x")
+        self.assertNotIn("GITHUB_TOKEN", " ".join(argv))
+        # The name may appear in the script (it names a file); the value never can,
+        # because compile has not resolved anything.
+        self.assertNotIn(FAKE_TOKEN, script)
+
+
+class SecretDeliveryTests(RunStateTestCase):
+    def dispatch_args(self, template_path, **overrides):
+        defaults = dict(
+            template=template_path, provider="exe.dev", runtime="codex", name="task-a",
+            prompt_file=None, no_wait=False, wait_timeout=60, poll_interval=0,
+        )
+        defaults.update(overrides)
+        return argparse.Namespace(**defaults)
+
+    def register(self):
+        agent_run.save_secret_config({
+            "GITHUB_TOKEN": {"command": token_source()},
+            "NPM_TOKEN": {"command": "echo npm-value"},
+        })
+
+    def run_dispatch(self):
+        """Dispatch against a fake provider; returns every command sent."""
+        self.register()
+        path = write_yaml(SECRETS_TEMPLATE)
+        sent = []
+
+        def fake_sh(args, input_text=None, check=True):
+            sent.append((args, input_text))
+            command = args[-1]
+            if args[:3] == ["ssh", "exe.dev", "new"]:
+                return completed(stdout=json.dumps({"vm_name": "task-a", "ssh_dest": "u@vm"}))
+            if "awaiting-secrets" in command:
+                return completed(stdout="PRESENT\n")
+            if "agent-run-ready" in command:
+                return completed(stdout="2026-08-14T07:00:00Z\n")
+            return completed()
+
+        with mock.patch.object(agent_run, "sh", fake_sh), mock.patch("builtins.print"):
+            with mock.patch.object(agent_run.time, "sleep"):
+                agent_run.cmd_dispatch(self.dispatch_args(path))
+        return sent
+
+    def test_the_value_reaches_the_vm_base64_encoded(self):
+        sent = self.run_dispatch()
+        pushes = [a[-1] for a, _ in sent if "base64 -d > ~/.agent-run/secrets/GITHUB_TOKEN" in a[-1]]
+        self.assertEqual(len(pushes), 1)
+        encoded = pushes[0].split("echo ")[1].split()[0]
+        self.assertEqual(base64.b64decode(encoded).decode().strip(), FAKE_TOKEN)
+
+    def test_the_value_is_never_sent_in_the_clear(self):
+        # Everything else — the creation call, the setup script, every other
+        # remote command — must be free of it.
+        for args, input_text in self.run_dispatch():
+            command = args[-1]
+            if "base64 -d > ~/.agent-run/secrets/" in command:
+                continue
+            self.assertNotIn(FAKE_TOKEN, command)
+            self.assertNotIn(FAKE_TOKEN, input_text or "")
+
+    def test_secrets_land_restricted(self):
+        sent = self.run_dispatch()
+        push = next(a[-1] for a, _ in sent if "secrets/GITHUB_TOKEN" in a[-1])
+        self.assertIn("umask 077", push)
+        self.assertIn("chmod 600 ~/.agent-run/secrets/GITHUB_TOKEN", push)
+
+    def test_the_completion_marker_is_written_last(self):
+        # The boot script wakes on it, so anything written after it is a race.
+        commands = [a[-1] for a, _ in self.run_dispatch() if a[:3] == ["ssh", "exe.dev", "ssh"] or "ssh" in a]
+        touch = next(i for i, c in enumerate(commands) if "touch ~/.agent-run/secrets/.complete" in c)
+        installer = next(i for i, c in enumerate(commands) if "install-secrets.sh" in c)
+        value = next(i for i, c in enumerate(commands) if "secrets/GITHUB_TOKEN" in c)
+        self.assertLess(value, touch)
+        self.assertLess(installer, touch)
+
+    def test_the_run_record_stores_names_not_values(self):
+        self.run_dispatch()
+        record = agent_run.run_record_path("task-a").read_text()
+        self.assertIn("GITHUB_TOKEN", record)
+        self.assertNotIn(FAKE_TOKEN, record)
+
+    def test_an_unregistered_secret_fails_before_any_vm_exists(self):
+        # Otherwise the VM boots and blocks forever on secrets that never come.
+        path = write_yaml(SECRETS_TEMPLATE)
+        calls = []
+
+        def fake_sh(args, input_text=None, check=True):
+            calls.append(args)
+            return completed()
+
+        with mock.patch.object(agent_run, "sh", fake_sh):
+            with self.assertRaises(agent_run.RunError):
+                agent_run.cmd_dispatch(self.dispatch_args(path))
+        self.assertEqual(calls, [])
+
+    def test_no_wait_is_refused_when_the_boot_script_would_block(self):
+        self.register()
+        path = write_yaml(SECRETS_TEMPLATE)
+        with self.assertRaises(agent_run.RunError) as ctx:
+            agent_run.cmd_dispatch(self.dispatch_args(path, no_wait=True))
+        self.assertIn("strand", str(ctx.exception))
+
+
 class ProviderErrorTests(unittest.TestCase):
     def test_sh_error_includes_stdout(self):
         # exe.dev reports errors as JSON on stdout with an empty stderr.
@@ -161,17 +617,6 @@ class ProviderErrorTests(unittest.TestCase):
             with self.assertRaises(agent_run.RunError) as ctx:
                 agent_run.create_vm(["ssh", "exe.dev", "new"], "script")
         self.assertIn("quota exceeded", str(ctx.exception))
-
-
-class RunStateTestCase(unittest.TestCase):
-    """Base class giving each test an isolated state root."""
-
-    def setUp(self):
-        self.state_dir = tempfile.TemporaryDirectory()
-        self.env = mock.patch.dict(os.environ, {"AGENT_RUN_STATE_PATH": self.state_dir.name})
-        self.env.start()
-        self.addCleanup(self.env.stop)
-        self.addCleanup(self.state_dir.cleanup)
 
 
 class DispatchTests(RunStateTestCase):

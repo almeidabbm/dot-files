@@ -387,6 +387,44 @@ For the `github` integration, prefer read-only until a task genuinely needs to p
 int add github --name=github --repository=lightdash/lightdash --readonly
 ```
 
+#### When an integration will not do: `agent-run secret`
+
+An integration is the better mechanism whenever one exists, because the credential
+is injected at the network layer and is never on the VM at all. For everything
+else — a host exe.dev has no integration with, a registry token, a PAT scoped
+tighter than the integration — register the command that *fetches* it:
+
+```bash
+agent-run secret set GITHUB_TOKEN --command 'gh auth token'
+agent-run secret ls          # names, commands, and whether each still resolves
+```
+
+The store holds the command, never its output, so nothing secret is written to
+this machine and rotating at the source needs no action here. A template then
+names it and says how it installs:
+
+```yaml
+secrets:
+  - name: GITHUB_TOKEN
+    type: git-credential
+    host: github.com
+
+repos:
+  - id: github.com/almeidabbm/private-thing
+    role: primary
+    auth: GITHUB_TOKEN
+```
+
+First boot pauses before its clones, dispatch delivers the value, and boot
+resumes. The token never enters the template, the creation command line, the
+setup journal, the run record, or the agent's environment.
+
+It is **not** beyond the agent's reach — the agent has a shell on that VM and
+runs as the user owning `~/.git-credentials`. Scope the token to the one repo,
+keep it read-only unless the task must push, and delete the VM when you are done.
+The full account is in
+[`agent-run/README.md`](../agent-run/README.md#credentials).
+
 #### Reaching the web UI
 
 Some setup is browser-only, and the shortcut for getting there may not work for you:
@@ -441,6 +479,10 @@ public.
 
 Start with `dot-files`. It is the smallest end-to-end path, so if something is wrong with
 your account, key, or integrations, it fails fast and cheaply.
+
+For a third repo, ask an agent for the `agent-run-template` skill rather than copying a
+template by hand — it works through the clone route, step placement, and readiness checks,
+then validates and compiles without creating a VM.
 
 ### 3. A run, start to finish
 
@@ -541,7 +583,11 @@ The trade-off table lives in [`agent-run/README.md`](../agent-run/README.md#choo
   `ANTHROPIC_API_KEY` in template `env`, and a test asserts no shipped template carries a
   credential-shaped value.
 - Model and repo access ride the integration gateways, so credentials stay off the VM.
-- Template `env` is plaintext on the VM: non-secret configuration only.
+- Template `env` is plaintext on the VM: non-secret configuration only. Token-shaped names
+  are refused outright — use `secrets:` and `agent-run secret set`.
+- A credential you supply yourself is kept out of the template, your disk, the creation
+  command line, the setup journal, and the run record — but not out of the agent's reach.
+  Scope it tightly and delete the VM.
 - Central task memory stays local. Send a task-scoped prompt, never the memory root.
 - Delete the VM when the evidence is captured, and confirm with `ssh exe.dev ls --json`.
 

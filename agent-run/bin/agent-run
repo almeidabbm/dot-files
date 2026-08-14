@@ -34,6 +34,11 @@ SCHEMA_PATH = ROOT / "templates" / "schema.json"
 # Subscription-only pilot: provider API keys must never reach a sandbox.
 FORBIDDEN_ENV = {"OPENAI_API_KEY", "ANTHROPIC_API_KEY"}
 
+# `env` becomes `--env=K=V` on the creation command line, which puts the value in
+# the provider's VM metadata and in the agent's own environment. Nothing
+# credential-shaped belongs there; `secrets:` exists for exactly this.
+SECRET_SHAPED_ENV = re.compile(r"(TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|API_KEY)", re.I)
+
 # exe.dev rejects setup scripts larger than 10KiB.
 SETUP_SCRIPT_LIMIT = 10 * 1024
 
@@ -111,12 +116,287 @@ def load_template(path):
         raise TemplateError(
             f"{path}: env must not set provider API keys: {', '.join(sorted(forbidden))}"
         )
+    shaped = sorted(k for k in template.get("env", {}) if SECRET_SHAPED_ENV.search(k))
+    if shaped:
+        raise TemplateError(
+            f"{path}: env looks like it carries a credential: {', '.join(shaped)}. "
+            f"env is plaintext on the VM and in the agent's own environment — "
+            f"declare it under 'secrets:' instead and register it with 'agent-run secret set'"
+        )
+    validate_repos(template, path)
+    validate_secrets(template, path)
     return template
 
 
 def repo_parts(repo_id):
     host, owner, name = repo_id.split("/")
     return host, owner, name
+
+
+def repo_path(repo):
+    """The checkout directory for a repo, relative to the sandbox workdir."""
+    return repo.get("path") or repo_parts(repo["id"])[2]
+
+
+def validate_repos(template, path="template"):
+    """Reject repo sets the setup script could not clone, or an agent could not start in.
+
+    Both failures are silent otherwise: colliding checkouts surface as a `git
+    clone` error deep in the setup journal, and an unmarked primary among
+    several repos means `primary_workdir` picks the first one declared, which is
+    an ordering accident rather than a decision.
+    """
+    repos = template.get("repos", [])
+
+    by_path = {}
+    for repo in repos:
+        by_path.setdefault(repo_path(repo), []).append(repo["id"])
+    for checkout, ids in by_path.items():
+        if len(ids) > 1:
+            raise TemplateError(
+                f"{path}: {len(ids)} repos both check out to '{checkout}': {', '.join(ids)}. "
+                f"Give all but one an explicit 'path:'"
+            )
+
+    primaries = [r["id"] for r in repos if r.get("role") == "primary"]
+    if len(primaries) > 1:
+        raise TemplateError(
+            f"{path}: only one repo may be the primary, but {len(primaries)} are: "
+            f"{', '.join(primaries)}. The primary is where the agent starts"
+        )
+    if len(repos) > 1 and not primaries:
+        raise TemplateError(
+            f"{path}: {len(repos)} repos and none marked 'role: primary'. "
+            f"Mark the one the agent should start in"
+        )
+
+
+def validate_secrets(template, path="template"):
+    """Reject secret declarations the installer could not act on.
+
+    Every check here is one a template author would otherwise discover on a VM,
+    after paying for it, with the failure showing up as a clone that asked for a
+    password on a box with no terminal to type one into.
+    """
+    secrets = template.get("secrets", [])
+
+    seen = set()
+    for secret in secrets:
+        if secret["name"] in seen:
+            raise TemplateError(f"{path}: secret '{secret['name']}' is declared twice")
+        seen.add(secret["name"])
+
+    by_name = {s["name"]: s for s in secrets}
+    for repo in template.get("repos", []):
+        name = repo.get("auth")
+        if not name:
+            continue
+        if repo.get("private"):
+            raise TemplateError(
+                f"{path}: {repo['id']} sets both 'private: true' and 'auth: {name}'. "
+                f"'private' clones through the exe.dev integration gateway and needs no "
+                f"credential on the VM; 'auth' clones over https with one. Pick one"
+            )
+        secret = by_name.get(name)
+        if not secret:
+            raise TemplateError(
+                f"{path}: {repo['id']} authenticates with '{name}', which no 'secrets:' entry declares"
+            )
+        if secret["type"] != "git-credential":
+            raise TemplateError(
+                f"{path}: {repo['id']} authenticates with '{name}', which is type "
+                f"'{secret['type']}'; cloning needs a 'git-credential' secret"
+            )
+        host = repo_parts(repo["id"])[0]
+        if secret.get("host") != host:
+            raise TemplateError(
+                f"{path}: {repo['id']} is on {host} but '{name}' authenticates to "
+                f"{secret.get('host')}; the credential helper matches on host, so it would never be offered"
+            )
+
+
+# --- local secret store -----------------------------------------------------
+#
+# The store holds *resolver commands*, never values: `gh auth token`,
+# `op read op://vault/item/field`, `security find-generic-password -w …`. So
+# nothing secret is written to this machine's disk by agent-run, and rotating a
+# credential at its source needs no action here.
+
+SECRET_VALUE_LIMIT = 8 * 1024
+
+
+def secrets_config_path():
+    return state_root() / "secrets.json"
+
+
+def load_secret_config():
+    path = secrets_config_path()
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
+def save_secret_config(config):
+    path = secrets_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+    path.chmod(0o600)
+
+
+def resolve_secret(name, config=None):
+    """Run a secret's resolver command and return its output.
+
+    Failures never echo the command's output: a partially-written credential is
+    still a credential, and this runs somewhere the operator can see.
+    """
+    config = load_secret_config() if config is None else config
+    entry = config.get(name)
+    if not entry:
+        raise RunError(
+            f"no secret named '{name}'; register it with:\n"
+            f"  agent-run secret set {name} --command '<command that prints it>'"
+        )
+    command = entry["command"]
+    result = subprocess.run(command, shell=True, text=True, capture_output=True)
+    if result.returncode != 0:
+        raise RunError(
+            f"resolving secret '{name}' failed (exit {result.returncode}): {command}\n"
+            f"  run it yourself to see why; its output is not shown here"
+        )
+    value = result.stdout.strip()
+    if not value:
+        raise RunError(f"resolving secret '{name}' produced nothing: {command}")
+    if "\n" in value:
+        # One credential per line is what .git-credentials and a token file both
+        # assume; a multi-line value would corrupt either silently.
+        raise RunError(
+            f"secret '{name}' resolved to several lines; the command should print "
+            f"the credential and nothing else: {command}"
+        )
+    if len(value.encode()) > SECRET_VALUE_LIMIT:
+        raise RunError(
+            f"secret '{name}' resolved to {len(value.encode())} bytes; "
+            f"that is not a credential, check the command: {command}"
+        )
+    return value
+
+
+def resolve_secrets(declared):
+    """Resolve every declared secret before anything is created.
+
+    Dispatch resolves up front on purpose: discovering an unregistered secret
+    after the VM exists means a box that can never finish booting, because the
+    boot script is already blocked waiting for it.
+    """
+    config = load_secret_config()
+    return {s["name"]: resolve_secret(s["name"], config) for s in declared}
+
+
+# --- secret delivery --------------------------------------------------------
+
+SECRETS_DIR_REMOTE = "~/.agent-run/secrets"
+SECRETS_COMPLETE_REMOTE = f"{SECRETS_DIR_REMOTE}/.complete"
+INSTALL_SECRETS_REMOTE = "~/.agent-run/install-secrets.sh"
+AWAITING_SECRETS_REMOTE = "~/work/.agent-run-awaiting-secrets"
+
+# How long first boot waits for dispatch to deliver. Generous: the wait costs
+# nothing, and a VM that gives up is a VM that has to be recreated.
+SECRETS_WAIT_SECONDS = 600
+SECRETS_POLL_SECONDS = 5
+
+
+def render_secret_handshake():
+    """Boot-script lines that block until dispatch has delivered the secrets.
+
+    The credential cannot ride the setup script: it runs under `set -x`, so
+    anything a token touches there is echoed into the journal that
+    `agent-run logs --source setup` prints. It cannot ride `--env` either, which
+    is VM metadata and the agent's own environment. So first boot pauses here,
+    before the clones that need it, and dispatch fills the gap.
+    """
+    secrets_dir = shell_path(SECRETS_DIR_REMOTE)
+    complete = shell_path(SECRETS_COMPLETE_REMOTE)
+    attempts = SECRETS_WAIT_SECONDS // SECRETS_POLL_SECONDS
+    return [
+        f'mkdir -p "{secrets_dir}"',
+        f'chmod 700 "$HOME"/.agent-run "{secrets_dir}"',
+        f"touch {shell_path(AWAITING_SECRETS_REMOTE)}",
+        f"for _ in $(seq 1 {attempts}); do",
+        f'  if [ -f "{complete}" ]; then break; fi',
+        f"  sleep {SECRETS_POLL_SECONDS}",
+        "done",
+        f'if [ ! -f "{complete}" ]; then',
+        f'  echo "secrets never arrived after {SECRETS_WAIT_SECONDS}s" >&2; exit 1',
+        "fi",
+        # The installer runs with -x off and keeps it off internally, so no
+        # expanded credential can reach the journal.
+        "set +x",
+        f'bash "{shell_path(INSTALL_SECRETS_REMOTE)}"',
+        "set -x",
+        f"rm -f {shell_path(AWAITING_SECRETS_REMOTE)}",
+    ]
+
+
+def render_install_secrets(secrets):
+    """The installer that runs on the VM. Generated from declarations only.
+
+    It contains no credential: each value is read at run time from the file
+    dispatch pushed. `set -x` is deliberately absent, and the shell it generates
+    never interpolates a value into a command that could be traced.
+    """
+    secrets_dir = shell_path(SECRETS_DIR_REMOTE)
+    lines = [
+        "#!/usr/bin/env bash",
+        "# generated by agent-run; reads values from files, contains none",
+        "set -eu",
+        "umask 077",
+        f'SECRETS="{secrets_dir}"',
+        "",
+    ]
+
+    git_creds = [s for s in secrets if s["type"] == "git-credential"]
+    if git_creds:
+        lines += [
+            "git config --global credential.helper store",
+            ': > "$HOME"/.git-credentials',
+            'chmod 600 "$HOME"/.git-credentials',
+            "",
+        ]
+
+    for secret in secrets:
+        name = secret["name"]
+        lines.append(f'VALUE="$(cat "$SECRETS"/{name})"')
+        if secret["type"] == "git-credential":
+            user = secret.get("username", "x-access-token")
+            lines.append(
+                f'printf \'%s\\n\' "https://{user}:$VALUE@{secret["host"]}" '
+                f'>> "$HOME"/.git-credentials'
+            )
+        else:
+            dest = f'"$HOME"/{secret["path"]}'
+            # The schema rejects shell metacharacters in `format`, so splitting
+            # on the placeholder and quoting the halves is unambiguous.
+            before, _, after = secret.get("format", "{{value}}").partition("{{value}}")
+            lines += [
+                f"mkdir -p \"$(dirname {dest})\"",
+                f"printf '%s\\n' \"{before}$VALUE{after}\" > {dest}",
+                f"chmod 600 {dest}",
+            ]
+        lines.append("unset VALUE")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def deliver_secrets(vm, secrets, values):
+    """Push resolved values, then the installer, then the marker that unblocks boot.
+
+    Order matters: the boot script wakes on `.complete`, so it must be the last
+    thing written, after every value and the script that reads them.
+    """
+    for secret in secrets:
+        name = secret["name"]
+        push_file(vm, f"{SECRETS_DIR_REMOTE}/{name}", values[name] + "\n", mode="600")
+    push_file(vm, INSTALL_SECRETS_REMOTE, render_install_secrets(secrets), mode="700")
+    vm_exec(vm, f"touch {SECRETS_COMPLETE_REMOTE}")
 
 
 def clone_url(repo, exe_cfg):
@@ -131,6 +411,9 @@ def clone_url(repo, exe_cfg):
         if host != "github.com":
             raise TemplateError(f"{repo['id']}: private cloning is only implemented for github.com")
         return f"https://github.int.exe.xyz/{owner}/{name}.git"
+    # A repo with `auth:` clones from the ordinary URL too: the credential is
+    # offered by git's store helper, matched on host, so no token is ever
+    # written into a URL that git would then keep in .git/config.
     return f"https://{host}/{owner}/{name}.git"
 
 
@@ -184,6 +467,41 @@ def render_llm_discovery(runtime):
     return lines
 
 
+# Where the manifest lives, and what an agent is told to read to find its way
+# around a multi-repo box.
+MANIFEST_REMOTE = "~/work/REPOS.md"
+
+
+def render_repos_manifest(template):
+    """Shell writing `~/work/REPOS.md`: what was cloned, where, and which is primary.
+
+    Without it the only repo an agent is told about is the one it starts in, so
+    every other checkout on the box is something it has to stumble across.
+    """
+    repos = template["repos"]
+    primary = primary_repo(repos)
+    rows = []
+    for repo in repos:
+        role = "primary" if repo is primary else repo.get("role", "secondary")
+        rows.append(
+            f"| `~/work/{repo_path(repo)}` | {repo['id']} | {repo.get('ref', '(default)')} | {role} |"
+        )
+    body = [
+        f"# Repositories on this VM",
+        "",
+        f"Cloned by agent-run from template `{template['name']}`. The primary checkout",
+        "is where a task starts; the others are here because the task needs them.",
+        "",
+        "| Path | Repository | Ref | Role |",
+        "| --- | --- | --- | --- |",
+        *rows,
+        "",
+    ]
+    # A quoted heredoc: the body is literal, and `set -x` prints the redirect
+    # rather than the content.
+    return [f'cat > "$WORK"/REPOS.md <<\'REPOSMD\'', *body, "REPOSMD"]
+
+
 def render_setup_script(template, runtime, exe_cfg):
     lines = [
         "#!/usr/bin/env bash",
@@ -194,11 +512,18 @@ def render_setup_script(template, runtime, exe_cfg):
         "",
     ]
 
+    # Before the clones: one of them may need a credential to succeed.
+    if template.get("secrets"):
+        lines.extend(render_secret_handshake())
+        lines.append("")
+
     for repo in template["repos"]:
-        _, _, name = repo_parts(repo["id"])
-        path = repo.get("path", name)
+        path = repo_path(repo)
         branch = f" --branch {shlex.quote(repo['ref'])}" if repo.get("ref") else ""
         lines.append(f'git clone{branch} {clone_url(repo, exe_cfg)} "$WORK"/{shlex.quote(path)}')
+    lines.append("")
+
+    lines.extend(render_repos_manifest(template))
     lines.append("")
 
     for step in template.get("setup", []):
@@ -211,6 +536,14 @@ def render_setup_script(template, runtime, exe_cfg):
                 lines.append(f'( cd "$WORK"/{shlex.quote(step["cwd"])} && {step["run"]} )')
             else:
                 lines.append(step["run"])
+    lines.append("")
+
+    # Per-repo steps run last, in their own checkout. The template-wide list is
+    # machine-level provisioning — the language runtime, the package manager —
+    # and a repo's own install is exactly the thing that depends on it.
+    for repo in template["repos"]:
+        for step in repo.get("setup", []):
+            lines.append(f'( cd "$WORK"/{shlex.quote(repo_path(repo))} && {step["run"]} )')
     lines.append("")
 
     for check in template.get("checks", []):
@@ -392,24 +725,52 @@ def wait_ready(vm, timeout, interval):
         time.sleep(interval)
 
 
+def wait_for_marker(vm, remote_path, timeout, interval, what):
+    """Block until a marker file exists on the VM.
+
+    The gateway exits 0 whatever happened inside, so `test -f` is asked to print
+    a token and only that token is believed.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        result = vm_exec(vm, f"test -f {remote_path} && echo PRESENT", check=False)
+        if "PRESENT" in result.stdout:
+            return
+        if time.monotonic() >= deadline:
+            raise RunError(
+                f"VM never asked for {what} within {timeout}s; "
+                f"inspect with: agent-run logs <run-name> --source setup"
+            )
+        time.sleep(interval)
+
+
 # File content travels base64-encoded inside the command line; keep it
 # comfortably under SSH command-length limits.
 PROMPT_LIMIT = 96 * 1024
 
 
-def push_file(vm, remote_path, content):
+def push_file(vm, remote_path, content, mode=None):
     """Write `content` to `remote_path` on the VM.
 
     The gateway neither forwards stdin nor preserves shell quoting, so anything
     containing spaces or quotes cannot be passed as an argument — it arrives
     split into separate argv entries. Base64 sidesteps both: the payload is a
     single whitespace-free token that survives the gateway intact.
+
+    `mode` is applied by the same command that creates the file, so a secret is
+    never briefly world-readable. Its directory is created 700 first, so even
+    that window is closed.
     """
     if len(content.encode()) > PROMPT_LIMIT:
         raise RunError(f"{remote_path} exceeds {PROMPT_LIMIT} bytes; put it in a repo instead")
     encoded = base64.b64encode(content.encode()).decode()
     parent = remote_path.rsplit("/", 1)[0]
-    vm_exec(vm, f"mkdir -p {parent} && echo {encoded} | base64 -d > {remote_path}")
+    write = f"mkdir -p {parent} && echo {encoded} | base64 -d > {remote_path}"
+    if mode:
+        # umask covers the create; chmod fixes the mode for a path that already
+        # existed. Both inside the subshell, so the file is never 644 even briefly.
+        write = f"(umask 077; {write} && chmod {mode} {remote_path})"
+    vm_exec(vm, write)
 
 
 def push_prompt(vm, prompt_path):
@@ -451,14 +812,20 @@ def agent_command(runtime, sandbox):
     raise RunError(f"no runner defined for runtime '{runtime}'")
 
 
+def primary_repo(repos):
+    """The repo an agent starts in, or None.
+
+    Falling back to the first declared repo is only safe because
+    `validate_repos` refuses a multi-repo template that marks no primary — with
+    one repo there is nothing to be ambiguous about.
+    """
+    return next((r for r in repos if r.get("role") == "primary"), repos[0] if repos else None)
+
+
 def primary_workdir(template):
     """The directory an agent should start in, as a remote path."""
-    repos = template.get("repos", [])
-    primary = next((r for r in repos if r.get("role") == "primary"), repos[0] if repos else None)
-    if not primary:
-        return "~/work"
-    _, _, name = repo_parts(primary["id"])
-    return f"~/work/{primary.get('path', name)}"
+    primary = primary_repo(template.get("repos", []))
+    return f"~/work/{repo_path(primary)}" if primary else "~/work"
 
 
 def shell_path(remote_path):
@@ -615,8 +982,19 @@ def provider_vm_names():
 
 
 def cmd_validate(args):
-    load_template(args.template)
+    template = load_template(args.template)
     print(f"{args.template}: valid")
+
+    # The 10 KiB cap is a hard failure at compile time, and a template creeps up
+    # on it as repos and setup steps accumulate. Report the budget while there is
+    # still room to act on it.
+    for runtime in template["runtimes"]:
+        size = len(render_setup_script(
+            template, runtime, template.get("providers", {}).get("exe.dev", {})
+        ).encode())
+        pct = size / SETUP_SCRIPT_LIMIT * 100
+        flag = "  <-- near the limit" if pct >= 80 else ""
+        print(f"  setup script ({runtime}): {size} / {SETUP_SCRIPT_LIMIT} bytes ({pct:.0f}%){flag}")
 
 
 def cmd_compile(args):
@@ -640,6 +1018,19 @@ def cmd_dispatch(args):
         raise RunError(f"run '{name}' already exists; 'agent-run rm {name}' first or pick another --name")
 
     argv, script = adapter(template, args.runtime, name)
+
+    # Resolve before creating anything. An unregistered secret discovered later
+    # would leave a VM whose boot script is already blocked waiting for it.
+    declared = template.get("secrets", [])
+    if declared and args.no_wait:
+        raise RunError(
+            "--no-wait cannot be used with a template that declares secrets: first boot "
+            "blocks until dispatch delivers them, so returning early would strand the VM"
+        )
+    values = resolve_secrets(declared) if declared else {}
+    if declared:
+        print(f"resolved {len(values)} secret(s): {', '.join(sorted(values))}", file=sys.stderr)
+
     print(f"creating VM: {' '.join(shlex.quote(a) for a in argv)}", file=sys.stderr)
     info = create_vm(argv, script)
     record = {
@@ -654,6 +1045,8 @@ def cmd_dispatch(args):
         # Where the agent should work: the primary repo if the template has one,
         # otherwise the shared work directory.
         "workdir": primary_workdir(template),
+        # Names only. A run record is ordinary local JSON, not a vault.
+        "secrets": [s["name"] for s in declared],
     }
     save_run(record)
     print(f"created VM '{record['vm']}' ({record['ssh_dest']})", file=sys.stderr)
@@ -661,6 +1054,14 @@ def cmd_dispatch(args):
     if args.no_wait:
         print(f"{name}: provisioning (skipped wait; check with 'agent-run status')")
         return
+
+    if declared:
+        wait_for_marker(
+            record["vm"], AWAITING_SECRETS_REMOTE,
+            args.wait_timeout, args.poll_interval, "its secrets",
+        )
+        deliver_secrets(record["vm"], declared, values)
+        print(f"delivered {len(values)} secret(s); boot resumed", file=sys.stderr)
 
     ready_at = wait_ready(record["vm"], args.wait_timeout, args.poll_interval)
     record["status"] = "ready"
@@ -1028,6 +1429,54 @@ def resources_cmd(names, interval=15):
     return f"while true; do clear; {stats}; sleep {interval}; done"
 
 
+# A resolver that *contains* the credential rather than fetching it puts the
+# value straight back at rest, which is the one thing this store exists to avoid.
+LITERAL_RESOLVER = re.compile(r"^\s*(echo|printf)\s")
+
+
+def cmd_secret_set(args):
+    # Resolve once now: a command that does not work is worth discovering here
+    # rather than halfway through a dispatch, with a VM already blocked on it.
+    config = load_secret_config()
+    config[args.name] = {"command": args.command}
+    resolve_secret(args.name, config)
+    save_secret_config(config)
+    print(f"{args.name}: registered ({args.command})")
+    print("  the command is stored; its output never is")
+    if LITERAL_RESOLVER.match(args.command):
+        print(
+            f"\nwarning: that command looks like it prints a literal rather than fetching one.\n"
+            f"  The command itself is stored in {secrets_config_path()} and is shown by\n"
+            f"  'agent-run secret ls', so a credential written into it is a credential at rest.\n"
+            f"  Prefer something that fetches: 'gh auth token', 'op read op://vault/item/field'.",
+            file=sys.stderr,
+        )
+
+
+def cmd_secret_ls(args):
+    config = load_secret_config()
+    if not config:
+        print("no secrets registered; add one with:")
+        print("  agent-run secret set GITHUB_TOKEN --command 'gh auth token'")
+        return
+    for name in sorted(config):
+        try:
+            resolve_secret(name, config)
+            state = "ok"
+        except RunError:
+            state = "FAILS"
+        print(f"{name:24} {state:6} {config[name]['command']}")
+
+
+def cmd_secret_rm(args):
+    config = load_secret_config()
+    if args.name not in config:
+        raise RunError(f"no secret named '{args.name}'")
+    del config[args.name]
+    save_secret_config(config)
+    print(f"{args.name}: removed")
+
+
 def cmd_rm(args):
     record = load_run(args.name)
     if record["status"] == "deleted":
@@ -1138,6 +1587,28 @@ def main():
     p = sub.add_parser("monitor", help="build a local tmux dashboard with a window per live run")
     p.add_argument("--session", default="agent-run", help="local tmux session name")
     p.set_defaults(func=cmd_monitor)
+
+    p = sub.add_parser(
+        "secret",
+        help="register the commands that resolve credentials (never their values)",
+    )
+    secret_sub = p.add_subparsers(dest="secret_command", required=True)
+
+    sp = secret_sub.add_parser("set", help="register or replace a secret's resolver command")
+    sp.add_argument("name", help="name a template's 'secrets:' block refers to, e.g. GITHUB_TOKEN")
+    sp.add_argument(
+        "--command",
+        required=True,
+        help="shell command printing the credential, e.g. 'gh auth token' or 'op read op://vault/item/field'",
+    )
+    sp.set_defaults(func=cmd_secret_set)
+
+    sp = secret_sub.add_parser("ls", help="list registered secrets and whether they still resolve")
+    sp.set_defaults(func=cmd_secret_ls)
+
+    sp = secret_sub.add_parser("rm", help="forget a secret's resolver command")
+    sp.add_argument("name")
+    sp.set_defaults(func=cmd_secret_rm)
 
     p = sub.add_parser("rm", help="delete a run's VM and mark the run deleted")
     p.add_argument("name")
