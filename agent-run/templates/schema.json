@@ -73,6 +73,11 @@
             "description": "Clone through the exe.dev GitHub integration gateway instead of the public URL.",
             "type": "boolean"
           },
+          "auth": {
+            "description": "Name of a declared git-credential secret to clone this repo with, instead of anonymously or through the exe.dev integration. Mutually exclusive with `private`.",
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
           "setup": {
             "description": "Steps run inside this repo's checkout, after every clone and before the top-level setup. The checkout is the working directory, so these steps take no cwd.",
             "type": "array",
@@ -111,6 +116,81 @@
       },
       "additionalProperties": {
         "type": "string"
+      }
+    },
+    "secrets": {
+      "description": "Credentials this environment needs, by name only. Values never appear here: agent-run resolves each name through its local secret store at dispatch time and delivers it to the VM after first boot.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "type"
+        ],
+        "properties": {
+          "name": {
+            "description": "Name registered with `agent-run secret set`.",
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "type": {
+            "enum": [
+              "git-credential",
+              "file"
+            ]
+          },
+          "host": {
+            "description": "git-credential only: the host this credential authenticates to, e.g. github.com.",
+            "type": "string",
+            "pattern": "^[a-z0-9.-]+$"
+          },
+          "username": {
+            "description": "git-credential only: the username half of the credential. Defaults to x-access-token, which is what a GitHub PAT expects.",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]+$"
+          },
+          "path": {
+            "description": "file only: destination relative to $HOME. Written 0600.",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_./-]+$"
+          },
+          "format": {
+            "description": "file only: line to write, with {{value}} standing in for the secret. Defaults to the bare value. Shell metacharacters are rejected so the rendered installer stays unambiguous.",
+            "type": "string",
+            "pattern": "^[^\"$`\\\\]*$"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "git-credential"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "host"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "file"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "path"
+              ]
+            }
+          }
+        ]
       }
     },
     "setup": {
