@@ -188,7 +188,7 @@ class DispatchTests(RunStateTestCase):
         prompt.close()
         responses = [
             completed(stdout=json.dumps({"vm_name": "task-a", "ssh_dest": "u@vm"})),
-            completed(stdout="ready\n"),
+            completed(stdout="2026-08-10T20:00:00Z\n"),
             completed(),
         ]
         pushed = {}
@@ -213,6 +213,46 @@ class DispatchTests(RunStateTestCase):
             agent_run.vm_exec("task-a", "cat ~/work/.agent-run-ready", check=False)
         args = fake.call_args.args[0]
         self.assertEqual(args[-4:], ["exe.dev", "ssh", "task-a", "cat ~/work/.agent-run-ready"])
+
+    # The gateway exits 0 even when the inner command fails, and folds the
+    # inner stderr into stdout. Observed verbatim in two real run records,
+    # where it was stored as the readiness timestamp and the VM was declared
+    # ready before its setup had finished.
+    GATEWAY_CAT_ERROR = "cat: /home/exedev/work/.agent-run-ready: No such file or directory\n"
+
+    def test_wait_ready_rejects_gateway_error_text(self):
+        responses = [
+            completed(stdout=json.dumps({"vm_name": "task-a", "ssh_dest": "u@vm"})),
+            completed(stdout=self.GATEWAY_CAT_ERROR),
+            completed(stdout=self.GATEWAY_CAT_ERROR),
+            completed(stdout="2026-08-11T00:29:16Z\n"),
+        ]
+
+        def fake_sh(args, input_text=None, check=True):
+            return responses.pop(0)
+
+        with mock.patch.object(agent_run, "sh", fake_sh), mock.patch.object(agent_run.time, "sleep"):
+            agent_run.cmd_dispatch(self.dispatch_args())
+
+        record = json.loads(agent_run.run_record_path("task-a").read_text())
+        self.assertEqual(record["ready_at"], "2026-08-11T00:29:16Z")
+        self.assertEqual(responses, [])  # kept polling instead of accepting the error
+
+    def test_wait_ready_times_out_when_marker_never_appears(self):
+        responses = [completed(stdout=json.dumps({"vm_name": "task-a", "ssh_dest": "u@vm"}))]
+
+        def fake_sh(args, input_text=None, check=True):
+            if responses:
+                return responses.pop(0)
+            return completed(stdout=self.GATEWAY_CAT_ERROR)
+
+        with mock.patch.object(agent_run, "sh", fake_sh), mock.patch.object(agent_run.time, "sleep"):
+            with self.assertRaises(agent_run.RunError):
+                agent_run.cmd_dispatch(self.dispatch_args(wait_timeout=0))
+
+        record = json.loads(agent_run.run_record_path("task-a").read_text())
+        self.assertEqual(record["status"], "provisioning")
+        self.assertNotIn("ready_at", record)
 
     def test_dispatch_refuses_duplicate_run_name(self):
         agent_run.save_run({"name": "task-a", "status": "ready", "created_at": "x"})
@@ -273,6 +313,24 @@ class StatusAndRmTests(RunStateTestCase):
         record = json.loads(agent_run.run_record_path("task-a").read_text())
         self.assertEqual(record["status"], "ready")
         self.assertEqual(record["ready_at"], "2026-08-11T00:15:00Z")
+
+    def test_status_keeps_provisioning_when_probe_returns_gateway_error(self):
+        self.seed_run(status="provisioning")
+        responses = [
+            completed(stdout=json.dumps({"vms": [{"vm_name": "task-a"}]})),  # provider ls
+            completed(stdout="cat: /home/exedev/work/.agent-run-ready: No such file or directory\n"),
+        ]
+
+        def fake_sh(args, input_text=None, check=True):
+            return responses.pop(0)
+
+        with mock.patch.object(agent_run, "sh", fake_sh):
+            with mock.patch("builtins.print"):
+                agent_run.cmd_status(argparse.Namespace(offline=False))
+
+        record = json.loads(agent_run.run_record_path("task-a").read_text())
+        self.assertEqual(record["status"], "provisioning")
+        self.assertNotIn("ready_at", record)
 
     def test_logs_shows_setup_journal_tail(self):
         self.seed_run()

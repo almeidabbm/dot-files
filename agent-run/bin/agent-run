@@ -18,6 +18,7 @@ import datetime
 import json
 import os
 import pathlib
+import re
 import shlex
 import subprocess
 import sys
@@ -38,6 +39,9 @@ SETUP_SCRIPT_LIMIT = 10 * 1024
 WORKDIR = '"$HOME"/work'
 READY_MARKER = f"{WORKDIR}/.agent-run-ready"
 READY_MARKER_REMOTE = "~/work/.agent-run-ready"
+# The setup script writes the marker with `date -u +%FT%TZ`; anything else came
+# from a failed read, not from a finished setup.
+READY_MARKER_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 RUNTIME_PACKAGES = {"codex": "codex", "claude": "claude"}
 
@@ -266,12 +270,26 @@ def create_vm(argv, script):
     return info
 
 
+def read_ready_marker(vm):
+    """The marker's timestamp, or None while the VM is not ready.
+
+    The gateway exits 0 even when the inner command fails and folds the inner
+    stderr into stdout, so neither the exit code nor a non-empty stdout is
+    evidence of readiness -- a well-formed marker timestamp is.
+    """
+    result = vm_exec(vm, f"cat {READY_MARKER_REMOTE}", check=False)
+    if result.returncode != 0:
+        return None
+    stamp = result.stdout.strip()
+    return stamp if READY_MARKER_RE.match(stamp) else None
+
+
 def wait_ready(vm, timeout, interval):
     deadline = time.monotonic() + timeout
     while True:
-        result = vm_exec(vm, f"cat {READY_MARKER_REMOTE}", check=False)
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
+        stamp = read_ready_marker(vm)
+        if stamp:
+            return stamp
         if time.monotonic() >= deadline:
             raise RunError(
                 f"VM did not become ready within {timeout}s; "
@@ -378,10 +396,10 @@ def cmd_dispatch(args):
 
 def probe_ready(record):
     """Re-check a provisioning run's readiness marker and update its record."""
-    result = vm_exec(record["vm"], f"cat {READY_MARKER_REMOTE}", check=False)
-    if result.returncode == 0 and result.stdout.strip():
+    stamp = read_ready_marker(record["vm"])
+    if stamp:
         record["status"] = "ready"
-        record["ready_at"] = result.stdout.strip()
+        record["ready_at"] = stamp
         save_run(record)
     return record
 
