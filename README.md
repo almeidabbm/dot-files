@@ -120,6 +120,14 @@ Simplified Neovim 0.11 config with [lazy.nvim](https://github.com/folke/lazy.nvi
 
 Full keybindings in [`.config/nvim/KEYBINDINGS.md`](.config/nvim/KEYBINDINGS.md).
 
+## tmux
+
+Stock tmux with comfort settings only — every default key binding is left alone,
+so what you learn transfers to any machine, including the remote VMs `agent-run`
+uses. Mouse on, 50k lines of scrollback, Kanagawa status bar to match Neovim.
+
+Keys and a troubleshooting table in [`.config/tmux/CHEATSHEET.md`](.config/tmux/CHEATSHEET.md).
+
 ## Shell
 
 Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/romkatv/powerlevel10k) prompt. Includes git and [asdf](https://asdf-vm.com/) plugins, [fzf](https://github.com/junegunn/fzf) integration, Go path setup, and bun completions.
@@ -133,6 +141,7 @@ Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/rom
 | [powerlevel10k](https://github.com/romkatv/powerlevel10k) | Shell theme |
 | [asdf](https://asdf-vm.com/) | Version management |
 | [fzf](https://github.com/junegunn/fzf) | Fuzzy finding |
+| [tmux](https://github.com/tmux/tmux) | Terminal multiplexing, `agent-run monitor` |
 | [GitHub CLI](https://cli.github.com/) + `gh stack` | Shared workflow rules |
 | [Python](https://www.python.org/) >= 3.10 | `agent-memory` runtime |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Claude integration |

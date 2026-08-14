@@ -35,6 +35,11 @@ create_symlink "$HOME/Develop/dot-files/.config/nvim/init.lua" "$HOME/.config/nv
 create_symlink "$HOME/Develop/dot-files/.config/nvim/lua" "$HOME/.config/nvim/lua" "Neovim Lua config"
 
 echo ""
+echo "🪟 Setting up tmux configuration..."
+create_symlink "$HOME/Develop/dot-files/.config/tmux/tmux.conf" "$HOME/.config/tmux/tmux.conf" "tmux config"
+create_symlink "$HOME/Develop/dot-files/.config/tmux/CHEATSHEET.md" "$HOME/.config/tmux/CHEATSHEET.md" "tmux cheat sheet"
+
+echo ""
 echo "🐚 Setting up shell configuration..."
 create_symlink "$HOME/Develop/dot-files/.zshrc" "$HOME/.zshrc" "Zsh config"
 create_symlink "$HOME/Develop/dot-files/.p10k.zsh" "$HOME/.p10k.zsh" "Powerlevel10k theme"

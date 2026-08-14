@@ -28,6 +28,8 @@ remove_symlink "$HOME/.config/nvim/init.vim" "Old Vim config"
 remove_symlink "$HOME/.config/nvim/init.lua" "Lua config"
 remove_symlink "$HOME/.config/nvim/lua" "Lua directory"
 remove_symlink "$HOME/.config/nvim/coc-settings.json" "CoC settings"
+remove_symlink "$HOME/.config/tmux/tmux.conf" "tmux config"
+remove_symlink "$HOME/.config/tmux/CHEATSHEET.md" "tmux cheat sheet"
 
 echo ""
 echo "🐚 Shell configuration:"
