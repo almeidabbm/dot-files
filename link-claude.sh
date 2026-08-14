@@ -20,38 +20,6 @@ create_symlink() {
     fi
 }
 
-# Register the git trunk guard as a PreToolUse(Bash) hook in the global
-# settings. Uses jq to merge idempotently so it never clobbers Claude Code's
-# own managed settings (theme, plugins, other hooks). A backup is kept.
-install_git_guard_hook() {
-    local settings="$HOME/.claude/settings.json"
-    local hook_cmd="$DOTFILES_DIR/.ai/hooks/guard-git-trunk.sh"
-    local marker="guard-git-trunk.sh"
-
-    command -v jq >/dev/null 2>&1 || { echo "  ⚠️  jq not found; skipping git guard hook"; return; }
-    [[ -f "$settings" ]] || echo '{}' > "$settings"
-
-    local count
-    count=$(jq --arg m "$marker" '[.. | .command? // empty | select(contains($m))] | length' "$settings" 2>/dev/null || echo 0)
-    if [[ "${count:-0}" -gt 0 ]]; then
-        echo "  ℹ️  Git guard hook already installed"
-        return
-    fi
-
-    local tmp
-    tmp=$(mktemp)
-    if jq --arg cmd "$hook_cmd" \
-        '.hooks.PreToolUse = ((.hooks.PreToolUse // []) + [{"matcher":"Bash","hooks":[{"type":"command","command":$cmd}]}])' \
-        "$settings" > "$tmp" 2>/dev/null && jq empty "$tmp" 2>/dev/null; then
-        cp "$settings" "$settings.dotfiles.bak"
-        mv "$tmp" "$settings"
-        echo "  ✅ Installed git guard hook (blocks commit/push to trunk)"
-    else
-        rm -f "$tmp"
-        echo "  ❌ Failed to install git guard hook (settings.json left unchanged)"
-    fi
-}
-
 echo "🤖 Setting up Claude Code configuration..."
 "$DOTFILES_DIR/link-agent-memory.sh"
 "$DOTFILES_DIR/link-agent-run.sh"
@@ -63,10 +31,6 @@ for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
     skill_name=$(basename "$skill_dir")
     create_symlink "$skill_dir" "$HOME/.claude/skills/$skill_name" "Claude skill: $skill_name"
 done
-
-echo ""
-echo "🪝 Installing git guard hook..."
-install_git_guard_hook
 
 echo ""
 echo "🎉 Claude Code setup complete!"
