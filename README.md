@@ -35,15 +35,14 @@ git clone <repo-url> ~/Develop/dot-files
 
 ### One source, every agent
 
-The workflow content is written **once** under `.ai/` and projected into each tool's native location by the `link-*.sh` scripts. Editing `.ai/` updates every agent at once (they read through symlinks); only the Claude-only guard hook differs per tool.
+The workflow content is written **once** under `.ai/` and projected into each tool's native location by the `link-*.sh` scripts. Editing `.ai/` updates every agent at once, because they all read through symlinks to the same files.
 
 ```mermaid
 flowchart LR
     rules["shared-instructions.md<br/>(workflow rules)"]
-    skills[".ai/skills/<br/>(5 task skills)"]
-    hooks[".ai/hooks/<br/>(git trunk guard)"]
+    skills[".ai/skills/<br/>(6 task skills)"]
 
-    subgraph links["link-*.sh — symlink + jq-merge"]
+    subgraph links["link-*.sh — symlink"]
         lc["link-claude"]
         lx["link-codex"]
         lo["link-opencode"]
@@ -51,16 +50,15 @@ flowchart LR
 
     rules --> lc & lx & lo
     skills --> lc & lx & lo
-    hooks --> lc
 
-    lc --> claude["Claude Code<br/>~/.claude/CLAUDE.md<br/>~/.claude/skills/<br/>settings.json hook"]
+    lc --> claude["Claude Code<br/>~/.claude/CLAUDE.md<br/>~/.claude/skills/"]
     lx --> codex["Codex<br/>~/.codex/AGENTS.md<br/>~/.codex/skills/"]
     lo --> opencode["OpenCode<br/>~/.config/opencode/AGENTS.md<br/>~/.config/opencode/skills/"]
 ```
 
 ### The task workflow
 
-The skills drive a small lifecycle on top of centralized task memory at `$AGENT_LOCAL_MEMORY_PATH`. Tasks are source-agnostic, can bind to more than one repository, and use `notes.md` frontmatter as the lifecycle source of truth. The trunk guard makes the "never touch `main`" rule deterministic.
+The skills drive a small lifecycle on top of centralized task memory at `$AGENT_LOCAL_MEMORY_PATH`. Tasks are source-agnostic, can bind to more than one repository, and use `notes.md` frontmatter as the lifecycle source of truth.
 
 ```mermaid
 flowchart TD
@@ -69,7 +67,7 @@ flowchart TD
     spec --> impl["implement on a feature branch<br/>status: implementing"]
     impl --> pm["/pre-merge<br/>writes review.md"]
     pm -->|blocking issues| impl
-    pm -->|clean → ready-to-ship| ship["push / submit PR<br/>feature push OK · main blocked by guard"]
+    pm -->|clean → ready-to-ship| ship["push / submit PR"]
     ship --> arch["/archive-task<br/>active/ → archive/"]
     st -.->|"where was I?"| status["/status<br/>read-only task view"]
     impl -.-> status
@@ -113,7 +111,7 @@ The reusable workflow content is agent-agnostic and lives in:
 
 - [`.ai/shared-instructions.md`](.ai/shared-instructions.md) for durable global workflow rules
 - [`.ai/skills/`](.ai/skills/) for reusable task workflows
-- [`.ai/HARNESS.md`](.ai/HARNESS.md) for the machinery behind those rules — layer map, current-task resolution order, guard behaviour, and recovery steps
+- [`.ai/HARNESS.md`](.ai/HARNESS.md) for the machinery behind those rules — layer map, current-task resolution order, and recovery steps
 
 The shared skills (slash commands in Claude — `/start-task` etc.; skills of the same name in Codex and OpenCode):
 
@@ -135,7 +133,7 @@ The shared rules and `.ai/skills/` are identical everywhere.
 
 ### Enforcement
 
-`link-claude.sh` also registers a `PreToolUse` hook ([`.ai/hooks/guard-git-trunk.sh`](.ai/hooks/guard-git-trunk.sh)) that deterministically blocks committing to or pushing `main`/`master`/`trunk`. Advisory rules in `shared-instructions.md` can be drifted past mid-session; the hook cannot. It is Claude-specific and merged idempotently into `~/.claude/settings.json` (a backup is kept); `unlink-claude.sh` removes only that entry.
+This layer instructs agents; it does not enforce against them. Everything under `.ai/` is advisory, including the branching rules. Enforcement of trunk protection belongs to each repository — branch protection rules, required reviews, CI — where it covers every contributor rather than only the machines running these dotfiles.
 
 ---
 

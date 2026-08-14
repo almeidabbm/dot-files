@@ -5,25 +5,25 @@ How the workflow layer is wired, and what to do when it misbehaves.
 `shared-instructions.md` holds the operating rules. This file holds the
 machinery those rules assume: where each concern lives, how the current task is
 resolved, and how to recover a broken install. Read it when a rule's mechanism
-matters — a binding is ambiguous, the guard blocked a command, `agent-memory`
-is missing, or you are changing the harness itself.
+matters — a binding is ambiguous, `agent-memory` is missing, or you are changing
+the harness itself.
 
-## Three layers
+## Two layers
 
 | Layer | Source | Reaches the agent through |
 | --- | --- | --- |
 | **Projection** | `.ai/shared-instructions.md`, `.ai/skills/` | `link-*.sh` symlinks into each tool's native path |
 | **Memory** | the resolved memory root | the `agent-memory` command |
-| **Guard** | `.ai/hooks/guard-git-trunk.sh` | a `PreToolUse(Bash)` entry in `~/.claude/settings.json` |
 
 Projection is one-way and identical per tool: `.ai/` is the source, the tool
 paths are its image. Claude reads `~/.claude/CLAUDE.md` and `~/.claude/skills/`,
 Codex reads `~/.codex/AGENTS.md` and `~/.codex/skills/`, OpenCode reads
 `~/.config/opencode/`. All three resolve to the same files.
 
-The guard is the exception: it is Claude-only, and it is *merged* into
-`settings.json` with `jq` rather than symlinked, because that file also carries
-Claude's own machine-local state.
+Every rule here is advisory: this layer instructs agents, it does not enforce
+against them. Enforcement belongs to each repository — branch protection,
+required reviews, CI — where it applies to every contributor rather than to
+whoever happens to be running these dotfiles.
 
 ## Change the source
 
@@ -31,7 +31,6 @@ Claude's own machine-local state.
 | --- | --- |
 | Operating rules for every tool | `.ai/shared-instructions.md` |
 | A workflow procedure | `.ai/skills/<name>/SKILL.md` |
-| Trunk-guard behaviour | `.ai/hooks/guard-git-trunk.sh` |
 | Task memory structure or CLI | `.ai/lib/agent_memory.py` (tests in `.ai/tests/`) |
 | Which files get projected | the matching `link-*.sh` |
 
@@ -39,9 +38,8 @@ Editing a projected path (`~/.claude/CLAUDE.md`) writes through the symlink to
 the repo file, so the change is version-controlled but the diff shows up
 somewhere you did not expect. Prefer the repo path.
 
-`~/.claude/settings.json` is machine-local. Only its guard-hook entry comes from
-this repo; everything else there stays on the machine, so treat it as untracked
-state.
+`~/.claude/settings.json` is entirely machine-local. Nothing in this repo writes
+to it, so treat it as untracked state.
 
 ## Memory root
 
@@ -88,23 +86,6 @@ agent-memory bind <task-id-or-slug> --repo <checkout> --branch <branch>
 
 A worktree needs its own bind after creation — it is a different checkout path
 than the main repo, so it inherits nothing.
-
-## Guard behaviour
-
-The hook reads the `PreToolUse` payload on stdin and exits `2` to block, with
-the reason on stderr. It blocks exactly two things:
-
-- `git commit` while the current branch is `main`, `master`, or `trunk`
-- `git push` from a trunk branch, or with a refspec whose destination is trunk
-
-Matching is exact, so `main-feature` and `feature/main-nav` pass. Feature
-commits, feature pushes, and PR submits all pass.
-
-It fails open. Without `jq`, or with an unreadable payload, it exits `0` and
-allows the command — the guard never bricks git.
-
-When it blocks you, the branch is wrong, not the guard. Create a feature branch
-and retry.
 
 ## Recovery
 
