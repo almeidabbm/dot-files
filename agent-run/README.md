@@ -25,7 +25,7 @@ Requires `python3` with `pyyaml` and `jsonschema`. Invoke it as
 flowchart TD
     tpl["template.yaml + TASK.md"] --> vc["validate / compile<br/>schema check, render setup script<br/>(no provider call)"]
     vc --> disp["dispatch<br/>create VM, poll until<br/>~/work/.agent-run-ready parses as a timestamp"]
-    disp --> auth["human-only: subscription login<br/>codex device auth / claude SSH flow / happy pairing"]
+    disp --> auth["only when the template has no<br/>configure-llm-integration step:<br/>authenticate the runtime on the VM"]
     auth --> run["run<br/>push runner.sh, start tmux session 'agent'<br/>agent runs in the foreground of that session"]
     run --> obs["logs · attach · monitor<br/>tail ~/work/agent.log, drive the tmux session,<br/>local dashboard with one window per run"]
     obs -->|"another pass"| run
@@ -203,7 +203,6 @@ env:
   NODE_ENV: development        # plaintext on the VM — non-secret config only
 setup:
   - update-runtimes            # named step: updates only the selected runtime
-  - install-happy              # named step: npm install -g happy
   - run: corepack enable && pnpm install
     cwd: lightdash
 checks:                        # each must exit 0 before the marker is written
@@ -233,9 +232,11 @@ repo the template clones.
 | `env` carries configuration, not secrets                  | Template `env` becomes `--env=K=V` on the creation command and is plaintext on the VM  |
 | Secrets stay out of the repo                              | Templates are committed; run records, prompts, and credentials are not                |
 
-Agent authentication is a subscription login performed by a human on the VM
-(`codex login --device-auth`, the Claude Code SSH flow, or `happy` pairing).
-That is why `dispatch` stops at ready rather than continuing into `run`.
+Agent authentication normally needs no human at all: the
+`configure-llm-integration` step discovers which attached LLM integration serves
+the chosen runtime and configures it, so no credential is written to the VM and
+no login happens. A template without that step leaves the runtime unauthenticated,
+and `dispatch` then prints the manual login to run before `agent-run run`.
 
 ## Choosing a sandbox
 
@@ -277,7 +278,7 @@ Each of these is a fact about exe.dev that the tool is shaped around.
 | The same no-quoting rule applies to `ssh exe.dev new` arguments                                   | `compile` rejects any argument containing whitespace, so a template `env` value like `hello world` fails at compile time     |
 | Direct `ssh <vm>.exe.xyz` can land in the exe.dev REPL instead of the VM                          | All remote execution routes through `ssh exe.dev ssh <vm>`, including `attach` and `logs --follow`                          |
 | The SSH key is tag-scoped, so unknown `--tag` values are rejected                                 | Run metadata rides `--comment`; template `tags:` must match what your key allows                                            |
-| The `exeuntu` image ships git and the agent CLIs, but no node or npm                              | Any node-dependent setup step — `install-happy`, `pnpm install` — needs node installed by an earlier `run:` step            |
+| The `exeuntu` image ships git and the agent CLIs, but no node or npm                              | Any node-dependent setup step — `pnpm install` — needs node installed by an earlier `run:` step; NodeSource works           |
 | The gateway exits 0 even when the inner command fails, and folds inner stderr into stdout         | Neither the exit code nor non-empty stdout proves anything; readiness is proved only by output matching `YYYY-MM-DDTHH:MM:SSZ`, and the agent probe accepts only `RUNNING` or `DONE:<code>` |
 
 ## Troubleshooting
@@ -287,7 +288,7 @@ Each of these is a fact about exe.dev that the tool is shaped around.
 | `VM did not become ready within Ns`                          | Setup still running, or a setup step failed               | `agent-run logs <name> --source setup`; fix the template and re-dispatch   |
 | `status` shows `provisioning?`                               | Marker absent — same two causes                            | Same; `--wait-timeout` buys time for a genuinely slow setup                |
 | `status` shows `missing`                                     | VM gone at the provider, local record still live          | `agent-run rm <name>` to reconcile the record                             |
-| `npm: command not found` in the setup log                    | `exeuntu` ships no node/npm                               | Install node in a `run:` step before `install-happy` or any pnpm step      |
+| `npm: command not found` in the setup log                    | `exeuntu` ships no node/npm                               | Install node from NodeSource in a `run:` step before any pnpm step         |
 | `argument would be split by the provider's parser`           | Whitespace in an `env` value, name, or tag                | Remove the whitespace; move multi-word config into the repo                |
 | Creation fails with `--tag not allowed`                      | The SSH key is scoped to specific tags                    | Use a tag your key allows; run metadata already rides `--comment`         |
 | Agent state is `unreachable`                                 | Probe output was neither `RUNNING` nor `DONE:<code>`      | `agent-run logs <name>`, or `ssh -t exe.dev ssh <vm>` and look             |

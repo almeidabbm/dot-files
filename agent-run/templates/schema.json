@@ -105,8 +105,7 @@
           {
             "enum": [
               "configure-llm-integration",
-              "update-runtimes",
-              "install-happy"
+              "update-runtimes"
             ]
           },
           {

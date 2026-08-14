@@ -70,17 +70,12 @@ SSH_BATCH_OPTS = [
 # exe.dev's first-boot setup script logs to the journal under this tag.
 SETUP_LOG_CMD = "sudo journalctl -t exe-setup --no-pager"
 
-AUTH_HINTS = {
-    "codex": [
-        "codex login --device-auth   # finish on your phone",
-        "codex login status          # must report ChatGPT sign-in, not an API key",
-        "happy codex                 # scan the QR with the Happy app",
-    ],
-    "claude": [
-        "claude                      # choose the subscription login, complete the SSH flow",
-        "/status                     # inside claude: confirm Pro/Max subscription",
-        "happy claude                # scan the QR with the Happy app",
-    ],
+# Printed after dispatch when a template has no `configure-llm-integration`
+# step: without it, nothing has pointed the runtime at an integration, so a
+# human has to authenticate it on the VM before `agent-run run` will work.
+MANUAL_AUTH_HINTS = {
+    "codex": "codex login --device-auth   # then: codex login status",
+    "claude": "claude                      # choose the subscription login, complete the SSH flow",
 }
 
 
@@ -211,8 +206,6 @@ def render_setup_script(template, runtime, exe_cfg):
             lines.extend(render_llm_discovery(runtime))
         elif step == "update-runtimes":
             lines.append(f"sudo exeuntu update {RUNTIME_PACKAGES[runtime]}")
-        elif step == "install-happy":
-            lines.append("sudo npm install -g happy")
         else:
             if step.get("cwd"):
                 lines.append(f'( cd "$WORK"/{shlex.quote(step["cwd"])} && {step["run"]} )')
@@ -602,10 +595,15 @@ def cmd_dispatch(args):
         print(f"prompt copied to ~/work/TASK.md", file=sys.stderr)
 
     print(f"{name}: ready ({record['ssh_dest']})")
-    print("\nnext, the human-only part:")
-    print(f"  ssh -t exe.dev ssh {record['vm']}   # gateway route; direct ssh can land in the exe.dev REPL")
-    for hint in AUTH_HINTS[args.runtime]:
-        print(f"  {hint}")
+    if "configure-llm-integration" in template.get("setup", []):
+        print("\nnext:")
+        print(f"  agent-run run {name} --prompt-file <task.md>")
+        print(f"  agent-run logs {name} --follow")
+    else:
+        # No configure step, so the runtime has no model access yet.
+        print("\nnext, authenticate the runtime on the VM, then 'agent-run run':")
+        print(f"  ssh -t exe.dev ssh {record['vm']}   # gateway route; direct ssh can land in the exe.dev REPL")
+        print(f"  {MANUAL_AUTH_HINTS[args.runtime]}")
 
 
 def probe_ready(record):

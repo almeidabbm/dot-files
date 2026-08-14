@@ -23,7 +23,6 @@ env:
 
 setup:
   - update-runtimes
-  - install-happy
   - run: corepack enable && pnpm install
     cwd: lightdash
 

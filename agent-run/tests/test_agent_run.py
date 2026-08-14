@@ -734,3 +734,36 @@ class LlmDiscoveryTests(unittest.TestCase):
             script = "\n".join(agent_run.render_llm_discovery(runtime))
             self.assertNotIn("sk-", script)
             self.assertIn("int.exe.xyz", script)
+
+
+class DispatchNextStepsTests(RunStateTestCase):
+    def dispatch_with(self, setup_steps):
+        path = write_yaml(
+            "version: 1\nname: probe-tpl\nruntimes: [codex]\n"
+            "repos:\n  - id: github.com/o/r\n"
+            + ("setup:\n" + "".join(f"  - {s}\n" for s in setup_steps) if setup_steps else "")
+        )
+        responses = [
+            completed(stdout=json.dumps({"vm_name": "t", "ssh_dest": "u@vm"})),
+            completed(stdout="2026-08-14T06:00:00Z\n"),
+        ]
+        printed = []
+        args = argparse.Namespace(
+            template=path, provider="exe.dev", runtime="codex", name="t",
+            prompt_file=None, no_wait=False, wait_timeout=60, poll_interval=1,
+        )
+        with mock.patch.object(agent_run, "sh", lambda *a, **k: responses.pop(0)):
+            with mock.patch("builtins.print", lambda *a, **k: printed.append(str(a[0]) if a else "")):
+                agent_run.cmd_dispatch(args)
+        return "\n".join(printed)
+
+    def test_configured_template_points_at_run_not_a_login(self):
+        # Discovery already configured the runtime; telling a human to log in
+        # would send them chasing an authentication problem that is not there.
+        out = self.dispatch_with(["configure-llm-integration"])
+        self.assertIn("agent-run run t", out)
+        self.assertNotIn("login", out)
+
+    def test_unconfigured_template_still_asks_for_a_login(self):
+        out = self.dispatch_with([])
+        self.assertIn("login", out)
