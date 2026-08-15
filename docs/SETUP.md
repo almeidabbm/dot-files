@@ -469,20 +469,19 @@ int add github --name=github --repository=lightdash/lightdash --readonly
 
 ### 2. Our repos
 
-Two templates ship, and they differ in exactly the way that matters — whether the repo is
-public.
+One template ships:
 
 | Template | Repo | Needs `github` integration? | Ready in |
 | --- | --- | --- | --- |
 | `dot-files.yaml` | `almeidabbm/dot-files` (public) | no — clones anonymously | ~1 min |
-| `lightdash-dev.yaml` | `lightdash/lightdash` (private) | **yes** | several min (`pnpm install`) |
 
 Start with `dot-files`. It is the smallest end-to-end path, so if something is wrong with
 your account, key, or integrations, it fails fast and cheaply.
 
-For a third repo, ask an agent for the `agent-run-template` skill rather than copying a
+For any other repo, ask an agent for the `agent-run-template` skill rather than copying a
 template by hand — it works through the clone route, step placement, and readiness checks,
-then validates and compiles without creating a VM.
+then validates and compiles without creating a VM. Templates are written on demand and a
+template path is just a path, so a generated one need not live in this repo.
 
 ### 3. A run, start to finish
 
@@ -513,11 +512,12 @@ ssh exe.dev ls --json                # confirm: {"vms":[]}
 Swap `--runtime codex` for `--runtime claude` and nothing else changes. Both runtimes have
 been verified end to end on the identical task.
 
-For lightdash, allow for the monorepo install:
+For a template with a heavy install — a monorepo `pnpm install`, a large build — allow for
+it with a longer readiness timeout:
 
 ```bash
-agent-run dispatch agent-run/templates/lightdash-dev.yaml \
-  --runtime codex --name ld-bug --wait-timeout 1800
+agent-run dispatch ~/agent-run-templates/big-repo.yaml \
+  --runtime codex --name big-bug --wait-timeout 1800
 ```
 
 ### 3a. Driving one by hand

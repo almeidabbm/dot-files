@@ -89,10 +89,15 @@ dispatch instead of ten minutes into an agent's run. Prove the tools exist
 
 ## 4. Write the file
 
-Save to `agent-run/templates/<name>.yaml`, where `<name>` matches the template's
-own `name:` field. Comment the decisions that are not obvious from the value —
-why this node version, why this integration, why the timeout will be long. The
-shipped templates set the standard for this; read `lightdash-dev.yaml`.
+Ask where it goes, and default to `~/agent-run-templates/<name>.yaml` — a
+template is a working file, and every `agent-run` command takes a plain path, so
+nothing requires it to live in the dot-files repo. Save it there only when it is
+meant to be shared and version-controlled, as `dot-files.yaml` is. Either way
+`<name>` matches the template's own `name:` field.
+
+Comment the decisions that are not obvious from the value — why this node
+version, why this integration, why the timeout will be long. `dot-files.yaml`
+sets the standard for this; read it.
 
 Keep every value whitespace-free. `ssh` joins remote arguments with spaces and
 exe.dev's parser has no quoting, so a template `env` value like `hello world`
@@ -101,8 +106,8 @@ fails at compile time.
 ## 5. Prove it before spending a VM
 
 ```sh
-agent-run validate agent-run/templates/<name>.yaml
-agent-run compile agent-run/templates/<name>.yaml --runtime codex --script-out /tmp/<name>.sh
+agent-run validate <path-to>/<name>.yaml
+agent-run compile <path-to>/<name>.yaml --runtime codex --script-out /tmp/<name>.sh
 ```
 
 `validate` runs the schema, the repo checks, the secret checks, and the
