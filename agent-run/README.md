@@ -47,10 +47,10 @@ Reports the compiled setup script against exe.dev's 10 KiB cap, per runtime, so
 a template creeping toward the limit says so while there is still room to act.
 
 ```sh
-agent-run/bin/agent-run validate agent-run/templates/lightdash-dev.yaml
-# agent-run/templates/lightdash-dev.yaml: valid
-#   setup script (codex): 1606 / 10240 bytes (16%)
-#   setup script (claude): 1572 / 10240 bytes (15%)
+agent-run/bin/agent-run validate agent-run/templates/dot-files.yaml
+# agent-run/templates/dot-files.yaml: valid
+#   setup script (codex): 1378 / 10240 bytes (13%)
+#   setup script (claude): 1344 / 10240 bytes (13%)
 ```
 
 ### compile
@@ -59,12 +59,11 @@ Renders the setup script to a file and prints the creation command for you to
 read or run yourself. Executes nothing.
 
 ```sh
-agent-run/bin/agent-run compile agent-run/templates/lightdash-dev.yaml \
+agent-run/bin/agent-run compile agent-run/templates/dot-files.yaml \
   --runtime codex --name task-a --script-out /tmp/task-a-setup.sh
-# setup script -> /tmp/task-a-setup.sh (447 bytes)   [stderr]
-# ssh exe.dev new --json --name=task-a --cpu=4 --memory=8GB --disk=50GB \
-#   --image=exeuntu --env=NODE_ENV=development --integration=github \
-#   --tag=agent-pilot --comment=agent-run:lightdash-dev:codex \
+# setup script -> /tmp/task-a-setup.sh (1378 bytes)   [stderr]
+# ssh exe.dev new --json --name=task-a --cpu=2 --memory=4GB --disk=20GB \
+#   --image=exeuntu --comment=agent-run:dot-files:codex \
 #   --setup-script=/dev/stdin < /tmp/task-a-setup.sh
 ```
 
@@ -79,7 +78,7 @@ to run in parallel under different `--name`s; a name with a live record is
 refused.
 
 ```sh
-agent-run/bin/agent-run dispatch agent-run/templates/lightdash-dev.yaml \
+agent-run/bin/agent-run dispatch agent-run/templates/dot-files.yaml \
   --runtime codex --name task-a --prompt-file task-a.md
 # creating VM: ssh exe.dev new --json --name=task-a ...      [stderr]
 # created VM 'task-a' (u123@task-a.exe.xyz)                  [stderr]
@@ -223,13 +222,13 @@ agent-run/bin/agent-run secret rm GITHUB_TOKEN
 
 ```yaml
 version: 1
-name: lightdash-dev            # also the default run and VM name prefix
+name: example-dev              # also the default run and VM name prefix
 resources: { cpu: 4, memory: 8GB, disk: 50GB }
 runtimes: [codex, claude]      # allowed; the actual one is a --runtime flag
 repos:
-  - id: github.com/lightdash/lightdash   # host/owner/repo
+  - id: github.com/org/app     # host/owner/repo
     ref: main
-    path: lightdash            # checkout dir under $HOME/work
+    path: app                  # checkout dir under $HOME/work
     role: primary              # where the agent starts
     private: true              # clone via github.int.exe.xyz
     setup:                     # runs inside this checkout; takes no cwd
@@ -248,10 +247,10 @@ providers:                     # the only place provider specifics may appear
     tags: [agent-pilot]
 ```
 
-The generated first-boot script clones the repos, writes the manifest, runs each
-repo's own setup steps, runs the template-wide setup steps, runs the checks, then
-writes `date -u +%FT%TZ` into `$HOME/work/.agent-run-ready`. That marker is the
-readiness contract.
+The generated first-boot script clones the repos, writes the manifest, runs the
+template-wide setup steps, runs each repo's own setup steps, runs the checks,
+then writes `date -u +%FT%TZ` into `$HOME/work/.agent-run-ready`. That marker is
+the readiness contract.
 
 ## Several repos on one box
 
