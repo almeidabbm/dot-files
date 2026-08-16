@@ -851,10 +851,6 @@ class StatusAndRmTests(RunStateTestCase):
             agent_run.cmd_rm(argparse.Namespace(name="nope", yes=True))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class RunnerTests(unittest.TestCase):
     def test_runner_carries_sandbox_and_captures_exit_code(self):
         script = agent_run.render_runner("codex", "danger-full-access", "~/work/repo")
@@ -1458,3 +1454,7 @@ class StopTests(RunStateTestCase):
         self.seed(status="deleted")
         with self.assertRaises(agent_run.RunError):
             agent_run.cmd_stop(argparse.Namespace(name="task-a"))
+
+
+if __name__ == "__main__":
+    unittest.main()
