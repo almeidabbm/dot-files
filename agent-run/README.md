@@ -224,6 +224,9 @@ agent-run/bin/agent-run secret rm GITHUB_TOKEN
 version: 1
 name: example-dev              # also the default run and VM name prefix
 resources: { cpu: 4, memory: 8GB, disk: 50GB }
+expose:                        # optional; see "Dev environments"
+  port: 3000
+  access: team                 # private | team | link | public
 runtimes: [codex, claude]      # allowed; the actual one is a --runtime flag
 repos:
   - id: github.com/org/app     # host/owner/repo
@@ -251,6 +254,45 @@ The generated first-boot script clones the repos, writes the manifest, runs the
 template-wide setup steps, runs each repo's own setup steps, runs the checks,
 then writes `date -u +%FT%TZ` into `$HOME/work/.agent-run-ready`. That marker is
 the readiness contract.
+
+## Dev environments
+
+A box earns its keep when someone else can open it. exe.dev proxies one port per
+VM over HTTPS, private by default; `expose:` makes that part of what the box *is*,
+so the URL exists the moment the box is ready rather than after three commands you
+had to remember.
+
+```yaml
+expose:
+  port: 3000                   # what the service listens on inside the VM
+  access: team                 # private | team | link | public
+  domain: ld-dev.example.com   # optional; the CNAME must already point at exe.dev
+```
+
+| `access` | Who can open it | Use it for |
+| --- | --- | --- |
+| `private` | Only you | The default. A box you are testing yourself |
+| `team` | Your exe.dev team | Teammates who have accounts |
+| `link` | Anyone with the URL | A reviewer with no exe.dev account |
+| `public` | The open web | Something genuinely meant to be public |
+
+Applied **after** the readiness marker, because proxying a port nothing is
+listening on just serves 502s to whoever you sent the link to. `dispatch` prints
+the URL and stores it in the run record — a box whose URL you cannot find is a box
+nobody tests.
+
+Two things the schema enforces, both of them platform facts rather than taste:
+`expose` is an object and not a list, because exe.dev proxies a single port per VM
+(put several services behind one entry point, or give each its own box); and a
+`domain` with `access: private` is refused, since the certificate and the CNAME
+would be work done for an audience of one. `validate` warns on `public` — not an
+error, but the one setting with no second chance.
+
+**What sharing does and does not open.** `share add` grants **web access only**;
+shell access is a separate `--root` flag that `expose:` never passes. So a
+teammate testing your app cannot reach the credentials on the box. What they *can*
+reach is the app — a dev-mode service with real data behind no auth is the thing
+to think about before choosing `public`.
 
 ## Several repos on one box
 

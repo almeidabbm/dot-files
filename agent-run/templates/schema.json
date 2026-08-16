@@ -40,6 +40,36 @@
         }
       }
     },
+    "expose": {
+      "description": "Make a service running on this box reachable over HTTPS. An object, not a list: the provider proxies one port per VM. Applied after the box reports ready.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "port"
+      ],
+      "properties": {
+        "port": {
+          "description": "The port the service listens on inside the VM.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "access": {
+          "description": "Who may open the URL. `private` is the default and the safe one: only you. `team` shares with your provider team, `link` mints an unauthenticated URL for someone with no account, `public` opens it to the world.",
+          "enum": [
+            "private",
+            "team",
+            "link",
+            "public"
+          ]
+        },
+        "domain": {
+          "description": "Optional custom domain, e.g. app.example.com. The CNAME must already point at the provider; a certificate is issued for it.",
+          "type": "string",
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+        }
+      }
+    },
     "repos": {
       "type": "array",
       "minItems": 1,

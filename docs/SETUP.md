@@ -539,6 +539,29 @@ Both connect straight to the VM rather than through the exe.dev gateway, because
 gateway allocates no TTY — `ssh -tt exe.dev ssh <vm> tty` reports `not a tty`, which is
 why tmux fails with "open terminal failed" if you route an interactive session through it.
 
+### 3b. Handing a running app to someone to test
+
+Add `expose:` to the template and the box comes up with a URL instead of needing three
+commands afterwards:
+
+```yaml
+expose:
+  port: 3000
+  access: team
+```
+
+`dispatch` prints the URL and records it, so `agent-run status` and the run record both
+know where the thing is. Pick `access` by who needs it: `team` for colleagues with exe.dev
+accounts, `link` for a reviewer who has none, `private` while it is only you.
+
+Sharing grants **web access only** — reaching a shell needs a separate `--root` flag that
+`expose:` never passes — so a tester gets the app and never the credentials on the box.
+The exposure to weigh is your own service: a dev-mode instance with real data behind no
+auth should not be `public`.
+
+The URL is an ordinary HTTPS address, so a phone opens it with no tooling at all. That is
+the easy half of working from a phone; driving the agent is the half that needs a terminal.
+
 ### 4. Watching several at once
 
 ```bash

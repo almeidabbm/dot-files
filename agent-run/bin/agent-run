@@ -107,6 +107,15 @@ def load_template(path):
         template = yaml.safe_load(f)
     with open(SCHEMA_PATH) as f:
         schema = json.load(f)
+    # Ahead of the schema, because "[] is not of type 'object'" explains the
+    # rule without explaining the reason, and the reason is a platform limit
+    # nobody guesses.
+    if isinstance((template or {}).get("expose"), list):
+        raise TemplateError(
+            f"{path}: expose must be a single object, not a list — exe.dev proxies "
+            f"one port per VM. Put several services behind one entry point, or "
+            f"give each its own box"
+        )
     try:
         jsonschema.validate(template, schema)
     except jsonschema.ValidationError as e:
@@ -125,6 +134,7 @@ def load_template(path):
         )
     validate_repos(template, path)
     validate_secrets(template, path)
+    validate_expose(template, path)
     return template
 
 
@@ -213,6 +223,89 @@ def validate_secrets(template, path="template"):
                 f"{path}: {repo['id']} is on {host} but '{name}' authenticates to "
                 f"{secret.get('host')}; the credential helper matches on host, so it would never be offered"
             )
+
+
+# --- exposing a service -----------------------------------------------------
+#
+# A dev environment earns its keep when someone else can open it. exe.dev
+# already proxies one port per VM over HTTPS, private by default; `expose:`
+# makes that part of what the box *is*, so the URL exists from the moment the
+# box is ready rather than after three commands you had to remember.
+
+DEFAULT_ACCESS = "private"
+
+
+def exposed_access(template):
+    """The declared access level, or the safe default."""
+    return (template.get("expose") or {}).get("access", DEFAULT_ACCESS)
+
+
+def validate_expose(template, path="template"):
+    """Reject exposure the provider could not carry out.
+
+    The list case is caught earlier, before the schema, because the reason is a
+    platform limit rather than a typo.
+    """
+    expose = template.get("expose")
+    if not expose:
+        return
+    # A custom domain on a box only you can open is almost always a mistake:
+    # the certificate and the CNAME are work done for an audience of one.
+    if expose.get("domain") and exposed_access(template) == "private":
+        raise TemplateError(
+            f"{path}: expose.domain is set but access is '{DEFAULT_ACCESS}', so nobody "
+            f"but you can reach it. Choose 'team', 'link', or 'public', or drop the domain"
+        )
+
+
+def apply_exposure(vm, template, https_url):
+    """Point the provider's proxy at the service and set who may reach it.
+
+    Runs after readiness: the port is only worth proxying once something is
+    listening on it. Returns the URL to hand a human, which is the whole point —
+    a box whose URL you cannot find is a box nobody tests.
+    """
+    expose = template.get("expose")
+    if not expose:
+        return None
+
+    access = exposed_access(template)
+    sh(["ssh", "exe.dev", "share", "port", vm, str(expose["port"])])
+
+    url = https_url or f"https://{vm}.exe.xyz"
+    if access == "private":
+        sh(["ssh", "exe.dev", "share", "set-private", vm])
+    elif access == "public":
+        sh(["ssh", "exe.dev", "share", "set-public", vm])
+    elif access == "team":
+        sh(["ssh", "exe.dev", "share", "add", vm, "team"])
+    elif access == "link":
+        # The link is minted by the provider, so it is the only URL that counts
+        # here. Its exact JSON shape is not documented; fall back rather than
+        # lose the box's URL over a parse.
+        result = sh(["ssh", "exe.dev", "share", "add-link", vm, "--json"], check=False)
+        url = parse_share_link(result.stdout) or url
+
+    if expose.get("domain"):
+        sh(["ssh", "exe.dev", "domain", "add", vm, expose["domain"]])
+        url = f"https://{expose['domain']}"
+    return url
+
+
+def parse_share_link(stdout):
+    """Pull a URL out of `share add-link --json`, or None if it isn't there."""
+    try:
+        payload = json.loads(stdout)
+    except (json.JSONDecodeError, TypeError):
+        match = re.search(r"https://\S+", stdout or "")
+        return match.group(0) if match else None
+    if isinstance(payload, dict):
+        for key in ("url", "share_link", "link"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.startswith("https://"):
+                return value
+    match = re.search(r"https://[^\s\"']+", stdout)
+    return match.group(0) if match else None
 
 
 # --- local secret store -----------------------------------------------------
@@ -985,6 +1078,17 @@ def cmd_validate(args):
     template = load_template(args.template)
     print(f"{args.template}: valid")
 
+    # Not an error — sometimes public is exactly right. But it is the one
+    # setting with no second chance, so it should never happen by accident.
+    if template.get("expose") and exposed_access(template) == "public":
+        port = template["expose"]["port"]
+        print(
+            f"  warning: expose.access is 'public' — anyone with the URL reaches port "
+            f"{port}, with no login. Use 'team' or 'link' unless it is meant for the "
+            f"open web",
+            file=sys.stderr,
+        )
+
     # The 10 KiB cap is a hard failure at compile time, and a template creeps up
     # on it as repos and setup steps accumulate. Report the budget while there is
     # still room to act on it.
@@ -1048,6 +1152,8 @@ def cmd_dispatch(args):
         # Names only. A run record is ordinary local JSON, not a vault.
         "secrets": [s["name"] for s in declared],
     }
+    if template.get("expose"):
+        record["expose"] = template["expose"]
     save_run(record)
     print(f"created VM '{record['vm']}' ({record['ssh_dest']})", file=sys.stderr)
 
@@ -1068,6 +1174,15 @@ def cmd_dispatch(args):
     record["ready_at"] = ready_at
     save_run(record)
 
+    # After readiness: proxying a port nothing is listening on just serves 502s
+    # to whoever you sent the link to.
+    if template.get("expose"):
+        url = apply_exposure(record["vm"], template, info.get("https_url"))
+        record["url"] = url
+        save_run(record)
+        access = exposed_access(template)
+        print(f"exposed port {template['expose']['port']} ({access}): {url}", file=sys.stderr)
+
     if args.prompt_file:
         push_prompt(record["vm"], args.prompt_file)
         record["prompt_file"] = str(pathlib.Path(args.prompt_file).resolve())
@@ -1075,6 +1190,8 @@ def cmd_dispatch(args):
         print(f"prompt copied to ~/work/TASK.md", file=sys.stderr)
 
     print(f"{name}: ready ({record['ssh_dest']})")
+    if record.get("url"):
+        print(f"  {record['url']}")
     if "configure-llm-integration" in template.get("setup", []):
         print("\nnext:")
         print(f"  agent-run run {name} --prompt-file <task.md>")

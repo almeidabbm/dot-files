@@ -1456,5 +1456,187 @@ class StopTests(RunStateTestCase):
             agent_run.cmd_stop(argparse.Namespace(name="task-a"))
 
 
+EXPOSE_TEMPLATE = """version: 1
+name: exposed
+runtimes: [codex]
+expose:
+  port: 3000
+  access: {access}
+repos:
+  - id: github.com/o/r
+    role: primary
+providers:
+  exe.dev:
+    image: exeuntu
+"""
+
+
+class ExposeDeclarationTests(unittest.TestCase):
+    """Exposure is declared, so the mistakes are caught before a VM exists."""
+
+    def test_a_list_names_the_platform_limit_not_the_type(self):
+        # "[] is not of type 'object'" states the rule without the reason, and
+        # the reason is the thing nobody guesses.
+        path = write_yaml(EXPOSE_TEMPLATE.format(access="private").replace(
+            "expose:\n  port: 3000\n  access: private",
+            "expose:\n  - port: 3000\n  - port: 8080",
+        ))
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.load_template(path)
+        self.assertIn("one port per VM", str(ctx.exception))
+
+    def test_access_defaults_to_private(self):
+        path = write_yaml(EXPOSE_TEMPLATE.format(access="private").replace(
+            "\n  access: private", ""
+        ))
+        template = agent_run.load_template(path)
+        self.assertEqual(agent_run.exposed_access(template), "private")
+
+    def test_a_domain_nobody_can_reach_is_refused(self):
+        path = write_yaml(
+            EXPOSE_TEMPLATE.format(access="private").replace(
+                "  access: private", "  access: private\n  domain: app.example.com"
+            )
+        )
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.load_template(path)
+        self.assertIn("nobody", str(ctx.exception))
+
+    def test_an_unknown_access_level_is_refused(self):
+        path = write_yaml(EXPOSE_TEMPLATE.format(access="everyone"))
+        with self.assertRaises(agent_run.TemplateError):
+            agent_run.load_template(path)
+
+    def test_a_template_without_expose_stays_valid(self):
+        template = agent_run.load_template(TEMPLATE)
+        self.assertIsNone(template.get("expose"))
+        self.assertEqual(agent_run.exposed_access(template), "private")
+
+    def test_validate_warns_on_public(self):
+        path = write_yaml(EXPOSE_TEMPLATE.format(access="public"))
+        with mock.patch("builtins.print") as fake_print:
+            agent_run.cmd_validate(argparse.Namespace(template=path))
+        said = " ".join(str(c.args[0]) for c in fake_print.call_args_list if c.args)
+        self.assertIn("public", said)
+        self.assertIn("no login", said)
+
+    def test_validate_stays_quiet_for_private(self):
+        path = write_yaml(EXPOSE_TEMPLATE.format(access="private"))
+        with mock.patch("builtins.print") as fake_print:
+            agent_run.cmd_validate(argparse.Namespace(template=path))
+        said = " ".join(str(c.args[0]) for c in fake_print.call_args_list if c.args)
+        self.assertNotIn("warning", said)
+
+
+class ExposeDispatchTests(RunStateTestCase):
+    """What dispatch sends, and what it hands back to a human."""
+
+    def dispatch_args(self, template_path, **overrides):
+        defaults = dict(
+            template=template_path, provider="exe.dev", runtime="codex", name="task-a",
+            prompt_file=None, no_wait=False, wait_timeout=60, poll_interval=0,
+        )
+        defaults.update(overrides)
+        return argparse.Namespace(**defaults)
+
+    def run_dispatch(self, access="private", link_stdout="", extra=""):
+        body = EXPOSE_TEMPLATE.format(access=access)
+        if extra:
+            body = body.replace("  access: " + access, "  access: " + access + extra)
+        path = write_yaml(body)
+        sent = []
+
+        def fake_sh(args, input_text=None, check=True):
+            sent.append(args)
+            if args[:3] == ["ssh", "exe.dev", "new"]:
+                return completed(stdout=json.dumps({
+                    "vm_name": "task-a", "ssh_dest": "u@vm",
+                    "https_url": "https://task-a.exe.xyz",
+                }))
+            if args[:4] == ["ssh", "exe.dev", "share", "add-link"]:
+                return completed(stdout=link_stdout)
+            if "agent-run-ready" in args[-1]:
+                return completed(stdout="2026-08-15T23:00:00Z\n")
+            return completed()
+
+        with mock.patch.object(agent_run, "sh", fake_sh), mock.patch("builtins.print"):
+            with mock.patch.object(agent_run.time, "sleep"):
+                agent_run.cmd_dispatch(self.dispatch_args(path))
+        return sent, json.loads(agent_run.run_record_path("task-a").read_text())
+
+    def share_calls(self, sent):
+        return [a for a in sent if a[:3] == ["ssh", "exe.dev", "share"]]
+
+    def test_the_port_is_proxied_and_the_url_recorded(self):
+        sent, record = self.run_dispatch()
+        self.assertIn(["ssh", "exe.dev", "share", "port", "task-a", "3000"], sent)
+        self.assertEqual(record["url"], "https://task-a.exe.xyz")
+        self.assertEqual(record["expose"]["port"], 3000)
+
+    def test_exposure_happens_after_readiness(self):
+        # Proxying a port nothing is listening on just serves 502s to whoever
+        # you sent the link to.
+        sent, _ = self.run_dispatch()
+        ready = next(i for i, a in enumerate(sent) if "agent-run-ready" in a[-1])
+        port = sent.index(["ssh", "exe.dev", "share", "port", "task-a", "3000"])
+        self.assertLess(ready, port)
+
+    def test_private_sets_private(self):
+        sent, _ = self.run_dispatch(access="private")
+        self.assertIn(["ssh", "exe.dev", "share", "set-private", "task-a"], sent)
+
+    def test_public_sets_public(self):
+        sent, _ = self.run_dispatch(access="public")
+        self.assertIn(["ssh", "exe.dev", "share", "set-public", "task-a"], sent)
+
+    def test_team_shares_with_the_team(self):
+        sent, _ = self.run_dispatch(access="team")
+        self.assertIn(["ssh", "exe.dev", "share", "add", "task-a", "team"], sent)
+
+    def test_link_prefers_the_minted_url(self):
+        sent, record = self.run_dispatch(
+            access="link", link_stdout=json.dumps({"url": "https://share.exe.xyz/abc"})
+        )
+        self.assertIn(["ssh", "exe.dev", "share", "add-link", "task-a", "--json"], sent)
+        self.assertEqual(record["url"], "https://share.exe.xyz/abc")
+
+    def test_link_falls_back_rather_than_losing_the_url(self):
+        # The provider's JSON shape for add-link is undocumented; an unparseable
+        # answer must not cost the box its URL.
+        _, record = self.run_dispatch(access="link", link_stdout="not json at all")
+        self.assertEqual(record["url"], "https://task-a.exe.xyz")
+
+    def test_a_custom_domain_becomes_the_url(self):
+        sent, record = self.run_dispatch(
+            access="public", extra="\n  domain: ld-dev.example.com"
+        )
+        self.assertIn(
+            ["ssh", "exe.dev", "domain", "add", "task-a", "ld-dev.example.com"], sent
+        )
+        self.assertEqual(record["url"], "https://ld-dev.example.com")
+
+    def test_a_template_without_expose_sends_no_share_calls(self):
+        path = write_yaml(EXPOSE_TEMPLATE.format(access="private").replace(
+            "expose:\n  port: 3000\n  access: private\n", ""
+        ))
+        sent = []
+
+        def fake_sh(args, input_text=None, check=True):
+            sent.append(args)
+            if args[:3] == ["ssh", "exe.dev", "new"]:
+                return completed(stdout=json.dumps({"vm_name": "task-a", "ssh_dest": "u@vm"}))
+            if "agent-run-ready" in args[-1]:
+                return completed(stdout="2026-08-15T23:00:00Z\n")
+            return completed()
+
+        with mock.patch.object(agent_run, "sh", fake_sh), mock.patch("builtins.print"):
+            with mock.patch.object(agent_run.time, "sleep"):
+                agent_run.cmd_dispatch(self.dispatch_args(path))
+        self.assertEqual(self.share_calls(sent), [])
+        record = json.loads(agent_run.run_record_path("task-a").read_text())
+        self.assertNotIn("url", record)
+        self.assertNotIn("expose", record)
+
+
 if __name__ == "__main__":
     unittest.main()
