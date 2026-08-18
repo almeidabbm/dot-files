@@ -6,6 +6,9 @@
 # Worktrees — checked out elsewhere via `git worktree`
 .worktrees/
 
+# Repository-local Codex configuration
+.codex/config.toml
+
 # Python runtime artifacts
 __pycache__/
 *.py[cod]
