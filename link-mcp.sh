@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Standalone script to install and configure MCP servers at system level.
-# Installs Chrome DevTools MCP for both Claude Code and OpenCode.
+# Installs Chrome DevTools MCP for Claude Code, Codex, and OpenCode.
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
 
@@ -20,12 +20,25 @@ add_claude_mcp() {
     local name="$1"
     shift
     
-    if claude mcp list 2>/dev/null | grep -q "^$name$"; then
+    if (cd "$DOTFILES_DIR" && claude mcp get "$name" >/dev/null 2>&1); then
         echo "  ℹ️  $name already configured in Claude Code"
     else
-        claude mcp add -s user "$name" -- "$@" 2>/dev/null && \
+        (cd "$DOTFILES_DIR" && claude mcp add -s user "$name" -- "$@" 2>/dev/null) && \
             echo "  ✅ Added $name to Claude Code" || \
             echo "  ⚠️  Failed to add $name to Claude Code"
+    fi
+}
+
+add_codex_mcp() {
+    local name="$1"
+    shift
+
+    if (cd "$DOTFILES_DIR" && codex mcp get "$name" >/dev/null 2>&1); then
+        echo "  ℹ️  $name already configured in Codex"
+    else
+        (cd "$DOTFILES_DIR" && codex mcp add "$name" -- "$@" 2>/dev/null) && \
+            echo "  ✅ Added $name to Codex" || \
+            echo "  ⚠️  Failed to add $name to Codex"
     fi
 }
 
@@ -67,11 +80,15 @@ echo "🤖 Configuring MCP servers for Claude Code..."
 add_claude_mcp chrome-devtools npx -y chrome-devtools-mcp
 
 echo ""
+echo "🧠 Configuring MCP servers for Codex..."
+add_codex_mcp chrome-devtools npx -y chrome-devtools-mcp@latest --isolated
+
+echo ""
 echo "⚡ Configuring MCP servers for OpenCode..."
 add_opencode_mcp chrome-devtools "chrome-devtools-mcp"
 
 echo ""
 echo "📝 Next steps:"
-echo "   - Restart Claude Code and OpenCode to load MCP servers"
+echo "   - Restart Claude Code, Codex, and OpenCode to load MCP servers"
 echo ""
 echo "🎉 MCP setup complete!"
