@@ -1,5 +1,6 @@
 import argparse
 import base64
+import datetime
 import importlib.machinery
 import importlib.util
 import json
@@ -1651,6 +1652,167 @@ class ExposeDispatchTests(RunStateTestCase):
         record = json.loads(agent_run.run_record_path("task-a").read_text())
         self.assertNotIn("url", record)
         self.assertNotIn("expose", record)
+
+
+LIFETIME_TEMPLATE = """version: 1
+name: lived
+runtimes: [codex]
+lifetime: {lifetime}
+repos:
+  - id: github.com/o/r
+    role: primary
+providers:
+  exe.dev:
+    image: exeuntu
+"""
+
+
+def aged_record(name, lifetime, age_secs, status="ready"):
+    then = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=age_secs)
+    return {
+        "name": name,
+        "vm": name,
+        "ssh_dest": "u@vm",
+        "provider": "exe.dev",
+        "template": "t.yaml",
+        "runtime": "codex",
+        "lifetime": lifetime,
+        "status": status,
+        "created_at": then.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+class LifetimeDeclarationTests(unittest.TestCase):
+    """A box's clock is declared, so the mistakes are caught before a VM exists."""
+
+    def test_review_without_expose_is_refused(self):
+        path = write_yaml(LIFETIME_TEMPLATE.format(lifetime="review"))
+        with self.assertRaises(agent_run.TemplateError) as ctx:
+            agent_run.load_template(path)
+        self.assertIn("not under review", str(ctx.exception))
+
+    def test_review_with_expose_is_valid(self):
+        path = write_yaml(LIFETIME_TEMPLATE.format(lifetime="review").replace(
+            "lifetime: review", "lifetime: review\nexpose:\n  port: 3000\n  access: team"
+        ))
+        template = agent_run.load_template(path)
+        self.assertEqual(agent_run.declared_lifetime(template), "review")
+
+    def test_an_unknown_lifetime_is_refused(self):
+        path = write_yaml(LIFETIME_TEMPLATE.format(lifetime="forever"))
+        with self.assertRaises(agent_run.TemplateError):
+            agent_run.load_template(path)
+
+    def test_lifetime_defaults_to_run(self):
+        template = agent_run.load_template(TEMPLATE)
+        self.assertIsNone(template.get("lifetime"))
+        self.assertEqual(agent_run.declared_lifetime(template), "run")
+
+    def test_lifetime_never_touches_the_setup_script(self):
+        # Lifetime is dispatch-side metadata; the box itself must not change.
+        bare = write_yaml(LIFETIME_TEMPLATE.format(lifetime="task").replace(
+            "lifetime: task\n", ""
+        ))
+        lived = write_yaml(LIFETIME_TEMPLATE.format(lifetime="task"))
+        _, bare_script = agent_run.ADAPTERS["exe.dev"](
+            agent_run.load_template(bare), "codex", "task-a"
+        )
+        _, lived_script = agent_run.ADAPTERS["exe.dev"](
+            agent_run.load_template(lived), "codex", "task-a"
+        )
+        self.assertEqual(bare_script, lived_script)
+
+
+class LifetimeAgeTests(unittest.TestCase):
+    def test_age_is_measured_from_created_at(self):
+        record = aged_record("task-a", "run", 2 * 3600)
+        self.assertAlmostEqual(agent_run.age_seconds(record), 2 * 3600, delta=5)
+
+    def test_humanize_covers_minutes_hours_days(self):
+        self.assertEqual(agent_run.humanize_age(None), "-")
+        self.assertEqual(agent_run.humanize_age(90), "1m")
+        self.assertEqual(agent_run.humanize_age(2 * 3600), "2h")
+        self.assertEqual(agent_run.humanize_age(3 * 24 * 3600 + 60), "3d")
+
+    def test_ceiling_depends_on_the_declared_lifetime(self):
+        two_days = 2 * 24 * 3600
+        self.assertTrue(agent_run.past_ceiling(aged_record("a", "run", two_days)))
+        self.assertFalse(agent_run.past_ceiling(aged_record("b", "task", two_days)))
+        self.assertFalse(agent_run.past_ceiling(aged_record("c", "review", two_days)))
+        self.assertTrue(agent_run.past_ceiling(aged_record("d", "review", 4 * 24 * 3600)))
+
+    def test_a_deleted_box_is_never_past_ceiling(self):
+        record = aged_record("task-a", "run", 30 * 24 * 3600, status="deleted")
+        self.assertFalse(agent_run.past_ceiling(record))
+
+
+class LifetimeStatusTests(RunStateTestCase):
+    def test_status_shows_age_and_flags_past_ceiling(self):
+        agent_run.save_run(aged_record("old-run", "run", 3 * 24 * 3600))
+        agent_run.save_run(aged_record("young-task", "task", 3600))
+        with mock.patch("builtins.print") as fake_print:
+            agent_run.cmd_status(status_args(offline=True))
+        output = "\n".join(str(c.args[0]) for c in fake_print.call_args_list if c.args)
+        old_line = next(l for l in output.splitlines() if l.startswith("old-run"))
+        young_line = next(l for l in output.splitlines() if l.startswith("young-task"))
+        self.assertIn("3d", old_line)
+        self.assertIn("past-ceiling", old_line)
+        self.assertIn("1h", young_line)
+        self.assertNotIn("past-ceiling", young_line)
+
+
+class LifetimeSweepTests(RunStateTestCase):
+    def test_sweep_deletes_only_boxes_past_their_ceiling(self):
+        agent_run.save_run(aged_record("old-run", "run", 3 * 24 * 3600))
+        agent_run.save_run(aged_record("young-run", "run", 3600))
+        agent_run.save_run(aged_record("gone", "run", 3 * 24 * 3600, status="deleted"))
+        removed = []
+
+        def fake_sh(args, input_text=None, check=True):
+            if args[:3] == ["ssh", "exe.dev", "ls"]:
+                return completed(stdout=json.dumps([{"name": "old-run"}, {"name": "young-run"}]))
+            if args[:3] == ["ssh", "exe.dev", "rm"]:
+                removed.append(args[3])
+            return completed()
+
+        with mock.patch.object(agent_run, "sh", fake_sh), mock.patch("builtins.print"):
+            agent_run.cmd_rm(argparse.Namespace(name=None, yes=True, sweep=True))
+
+        self.assertEqual(removed, ["old-run"])
+        record = json.loads(agent_run.run_record_path("old-run").read_text())
+        self.assertEqual(record["status"], "deleted")
+        untouched = json.loads(agent_run.run_record_path("young-run").read_text())
+        self.assertEqual(untouched["status"], "ready")
+
+    def test_sweep_with_nothing_to_do_says_so(self):
+        agent_run.save_run(aged_record("young-run", "run", 3600))
+        with mock.patch("builtins.print") as fake_print:
+            agent_run.cmd_rm(argparse.Namespace(name=None, yes=True, sweep=True))
+        said = " ".join(str(c.args[0]) for c in fake_print.call_args_list if c.args)
+        self.assertIn("nothing", said)
+
+    def test_sweep_refuses_a_name(self):
+        with self.assertRaises(agent_run.RunError):
+            agent_run.cmd_rm(argparse.Namespace(name="task-a", yes=True, sweep=True))
+
+    def test_dispatch_records_the_declared_lifetime(self):
+        path = write_yaml(LIFETIME_TEMPLATE.format(lifetime="task"))
+
+        def fake_sh(args, input_text=None, check=True):
+            if args[:3] == ["ssh", "exe.dev", "new"]:
+                return completed(stdout=json.dumps({"vm_name": "task-a", "ssh_dest": "u@vm"}))
+            if "agent-run-ready" in args[-1]:
+                return completed(stdout="2026-08-15T23:00:00Z\n")
+            return completed()
+
+        with mock.patch.object(agent_run, "sh", fake_sh), mock.patch("builtins.print"):
+            with mock.patch.object(agent_run.time, "sleep"):
+                agent_run.cmd_dispatch(argparse.Namespace(
+                    template=path, provider="exe.dev", runtime="codex", name="task-a",
+                    prompt_file=None, no_wait=False, wait_timeout=60, poll_interval=0,
+                ))
+        record = json.loads(agent_run.run_record_path("task-a").read_text())
+        self.assertEqual(record["lifetime"], "task")
 
 
 if __name__ == "__main__":

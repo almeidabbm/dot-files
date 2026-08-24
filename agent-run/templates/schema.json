@@ -40,6 +40,14 @@
         }
       }
     },
+    "lifetime": {
+      "description": "Whose clock governs this box. `run` (the default): one agent run — the box is expected to be removed when the run ends. `task`: the box serves a task across several runs and days. `review`: the box outlives the run so a teammate can open the exposed URL, and therefore requires `expose`. Ceilings are advisory: `status` flags a box past its lifetime's ceiling and `rm --sweep` collects them; nothing is destroyed automatically.",
+      "enum": [
+        "run",
+        "task",
+        "review"
+      ]
+    },
     "expose": {
       "description": "Make a service running on this box reachable over HTTPS. An object, not a list: the provider proxies one port per VM. Applied after the box reports ready.",
       "type": "object",

@@ -313,6 +313,39 @@ teammate testing your app cannot reach the credentials on the box. What they *ca
 reach is the app — a dev-mode service with real data behind no auth is the thing
 to think about before choosing `public`.
 
+## Box lifetimes
+
+A box's clock depends on whose clock governs it, and the template says which:
+
+```yaml
+lifetime: review               # run | task | review
+```
+
+| `lifetime` | Whose clock | Ceiling | Meaning |
+| --- | --- | --- | --- |
+| `run` | One agent run | 24h | The default. The box should be removed when the run ends |
+| `task` | A task | 7d | Survives across runs and days while the task is active |
+| `review` | A teammate | 3d | Outlives the run so someone can open the exposed URL |
+
+`review` requires `expose:` — a box nobody can reach is not under review — and
+describes the *same* box the agent worked on, opened for review **after** the
+run ends. That ordering is what makes it safe: the moving-target problem only
+exists while an agent is still editing. If you do need to keep iterating while
+someone tests the old state, fork the box by hand with `exe.dev cp` and expose
+the copy.
+
+Nothing is destroyed automatically. The ceilings are advisory: `status` shows
+each box's age and flags `past-ceiling`, and
+
+```sh
+agent-run rm --sweep           # list and delete every box past its ceiling
+```
+
+collects the ones that outlived their declared clock, with one confirmation for
+the batch (`--yes` skips it). A box that keeps earning its keep just declares a
+longer lifetime; a `review` box past its ceiling usually means the teammate
+needs a ping, not that the VM needs another week.
+
 ## Several repos on one box
 
 `repos` is a list, and everything above scales to it. Two rules are enforced at

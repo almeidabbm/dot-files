@@ -135,6 +135,7 @@ def load_template(path):
     validate_repos(template, path)
     validate_secrets(template, path)
     validate_expose(template, path)
+    validate_lifetime(template, path)
     return template
 
 
@@ -306,6 +307,64 @@ def parse_share_link(stdout):
                 return value
     match = re.search(r"https://[^\s\"']+", stdout)
     return match.group(0) if match else None
+
+
+# --- box lifetime -----------------------------------------------------------
+#
+# A box's clock depends on whose clock governs it: one agent run (hours), a
+# task (days), or a teammate's review (their days, not yours). Nothing here
+# destroys anything on its own — `rm` stays the only destroyer. The ceilings
+# are advisory: `status` flags a box past its ceiling, `rm --sweep` collects
+# them, and a box that should live longer just declares a longer lifetime.
+
+DEFAULT_LIFETIME = "run"
+
+LIFETIME_CEILINGS = {
+    "run": 24 * 3600,       # one working day; an older run box is a forgotten one
+    "task": 7 * 24 * 3600,  # a task that needs more should be re-dispatched fresh
+    "review": 3 * 24 * 3600,  # a teammate who has not looked in 3 days needs a ping, not a VM
+}
+
+
+def declared_lifetime(template_or_record):
+    return (template_or_record or {}).get("lifetime", DEFAULT_LIFETIME)
+
+
+def validate_lifetime(template, path="template"):
+    if template.get("lifetime") == "review" and not template.get("expose"):
+        raise TemplateError(
+            f"{path}: lifetime is 'review' but nothing is exposed — a box nobody "
+            f"can reach is not under review. Add 'expose:' or choose another lifetime"
+        )
+
+
+def age_seconds(record, now=None):
+    created = record.get("created_at")
+    if not created:
+        return None
+    then = datetime.datetime.strptime(created, "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=datetime.timezone.utc
+    )
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    return max(0, int((now - then).total_seconds()))
+
+
+def humanize_age(seconds):
+    if seconds is None:
+        return "-"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    if seconds < 24 * 3600:
+        return f"{seconds // 3600}h"
+    return f"{seconds // (24 * 3600)}d"
+
+
+def past_ceiling(record, now=None):
+    """True when a live box has outlived its declared lifetime's ceiling."""
+    if record.get("status") == "deleted":
+        return False
+    age = age_seconds(record, now)
+    return age is not None and age > LIFETIME_CEILINGS[declared_lifetime(record)]
 
 
 # --- local secret store -----------------------------------------------------
@@ -1144,6 +1203,7 @@ def cmd_dispatch(args):
         "provider": args.provider,
         "template": str(pathlib.Path(args.template).resolve()),
         "runtime": args.runtime,
+        "lifetime": declared_lifetime(template),
         "status": "provisioning",
         "created_at": utc_now(),
         # Where the agent should work: the primary repo if the template has one,
@@ -1239,6 +1299,7 @@ def cmd_status(args):
             agent = agent_state(record)
         elif vm_status == "deleted":
             agent = "deleted"
+        age = None if vm_status == "deleted" else age_seconds(record)
         rows.append(
             {
                 "name": record["name"],
@@ -1246,6 +1307,9 @@ def cmd_status(args):
                 "vm_status": vm_status,
                 "agent": agent,
                 "runtime": record["runtime"],
+                "lifetime": declared_lifetime(record),
+                "age_seconds": age,
+                "past_ceiling": past_ceiling(record) if vm_status != "deleted" else False,
                 "sandbox": record.get("sandbox"),
                 "ssh_dest": record.get("ssh_dest"),
                 "created_at": record["created_at"],
@@ -1259,8 +1323,11 @@ def cmd_status(args):
     for row in rows:
         line = (
             f"{row['name']:22} {row['vm_status']:13} {row['agent']:13} "
-            f"{row['runtime']:6} {row['ssh_dest'] or '-':26} {row['created_at']}"
+            f"{row['runtime']:6} {row['lifetime']:7} {humanize_age(row['age_seconds']):>4} "
+            f"{row['ssh_dest'] or '-':26} {row['created_at']}"
         )
+        if row["past_ceiling"]:
+            line += "  past-ceiling"
         print(line.rstrip())
 
 
@@ -1594,28 +1661,61 @@ def cmd_secret_rm(args):
     print(f"{args.name}: removed")
 
 
+def destroy_run(record, live):
+    """Delete a run's VM (or mark it deleted if the provider already lost it)."""
+    if live is not None and record["vm"] not in live:
+        record["status"] = "deleted"
+        record["deleted_at"] = utc_now()
+        save_run(record)
+        print(f"{record['name']}: VM '{record['vm']}' is already gone; marked deleted")
+        return
+    sh(["ssh", "exe.dev", "rm", record["vm"]])
+    record["status"] = "deleted"
+    record["deleted_at"] = utc_now()
+    save_run(record)
+    print(f"{record['name']}: deleted VM '{record['vm']}'")
+
+
 def cmd_rm(args):
+    if getattr(args, "sweep", False):
+        if args.name:
+            raise RunError("rm --sweep takes no name; it selects every box past its lifetime ceiling")
+        candidates = [r for r in list_runs() if r["status"] != "deleted" and past_ceiling(r)]
+        if not candidates:
+            print("nothing is past its lifetime ceiling")
+            return
+        for r in candidates:
+            print(
+                f"{r['name']:22} {declared_lifetime(r):7} "
+                f"{humanize_age(age_seconds(r)):>4} old "
+                f"(ceiling {humanize_age(LIFETIME_CEILINGS[declared_lifetime(r)])})"
+            )
+        if not args.yes:
+            answer = input(f"delete {len(candidates)} VM(s)? [y/N] ")
+            if answer.strip().lower() not in {"y", "yes"}:
+                print("aborted")
+                return
+        live = provider_vm_names()
+        for r in candidates:
+            destroy_run(r, live)
+        return
+
+    if not args.name:
+        raise RunError("a run name is required (or --sweep to collect boxes past their ceiling)")
     record = load_run(args.name)
     if record["status"] == "deleted":
         print(f"{args.name}: already deleted")
         return
     live = provider_vm_names()
     if live is not None and record["vm"] not in live:
-        record["status"] = "deleted"
-        record["deleted_at"] = utc_now()
-        save_run(record)
-        print(f"{args.name}: VM '{record['vm']}' is already gone; marked deleted")
+        destroy_run(record, live)
         return
     if not args.yes:
         answer = input(f"delete VM '{record['vm']}' ({record.get('ssh_dest', '?')})? [y/N] ")
         if answer.strip().lower() not in {"y", "yes"}:
             print("aborted")
             return
-    sh(["ssh", "exe.dev", "rm", record["vm"]])
-    record["status"] = "deleted"
-    record["deleted_at"] = utc_now()
-    save_run(record)
-    print(f"{args.name}: deleted VM '{record['vm']}'")
+    destroy_run(record, live)
 
 
 def main():
@@ -1728,8 +1828,10 @@ def main():
     sp.set_defaults(func=cmd_secret_rm)
 
     p = sub.add_parser("rm", help="delete a run's VM and mark the run deleted")
-    p.add_argument("name")
+    p.add_argument("name", nargs="?")
     p.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    p.add_argument("--sweep", action="store_true",
+                   help="delete every box past its lifetime ceiling instead of naming one")
     p.set_defaults(func=cmd_rm)
 
     args = parser.parse_args()
