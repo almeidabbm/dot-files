@@ -55,7 +55,7 @@
           "maximum": 65535
         },
         "access": {
-          "description": "Who may open the URL. `private` is the default and the safe one: only you. `team` shares with your provider team, `link` mints an unauthenticated URL for someone with no account, `public` opens it to the world.",
+          "description": "Who may open the URL. `private` is the default and the safe one: only you. `team` shares with your provider team, `link` mints an invite URL that works for anyone who signs in or creates a free account, `public` opens it to the world.",
           "enum": [
             "private",
             "team",

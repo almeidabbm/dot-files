@@ -273,13 +273,32 @@ expose:
 | --- | --- | --- |
 | `private` | Only you | The default. A box you are testing yourself |
 | `team` | Your exe.dev team | Teammates who have accounts |
-| `link` | Anyone with the URL | A reviewer with no exe.dev account |
+| `link` | Anyone with the URL, once signed in | A reviewer outside your exe.dev team |
 | `public` | The open web | Something genuinely meant to be public |
 
 Applied **after** the readiness marker, because proxying a port nothing is
 listening on just serves 502s to whoever you sent the link to. `dispatch` prints
 the URL and stores it in the run record — a box whose URL you cannot find is a box
 nobody tests.
+
+Two platform facts about the service behind the port, both learned from a live
+box rather than the docs. First, a service started in `setup:` with `nohup … &`
+**dies when setup finishes** — the setup script runs as a systemd unit and its
+whole cgroup is reaped on exit. Start anything that must outlive setup as its
+own unit:
+
+```yaml
+setup:
+  - run: sudo systemd-run --unit=app --working-directory=/home/exedev/work/app python3 -m http.server 8000
+```
+
+Second, `checks:` run once, immediately — a check that probes a service started
+one step earlier will race it and lose. Give it a retry window:
+
+```yaml
+checks:
+  - timeout 90 bash -c 'until curl -sf http://localhost:8000; do sleep 2; done'
+```
 
 Two things the schema enforces, both of them platform facts rather than taste:
 `expose` is an object and not a list, because exe.dev proxies a single port per VM

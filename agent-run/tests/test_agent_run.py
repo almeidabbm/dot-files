@@ -1606,6 +1606,21 @@ class ExposeDispatchTests(RunStateTestCase):
         _, record = self.run_dispatch(access="link", link_stdout="not json at all")
         self.assertEqual(record["url"], "https://task-a.exe.xyz")
 
+    def test_link_parses_the_real_provider_payload(self):
+        # The shape `share add-link --json` actually returns, captured from a
+        # live box on 2026-08-24. The link is an invite: it works for anyone
+        # with the URL once they sign in or create an account.
+        real = json.dumps({
+            "status": "success",
+            "token": "T6TOKENTOKENTOKENTOKENTOKE",
+            "url": "https://task-a.exe.xyz/?share=T6TOKENTOKENTOKENTOKENTOKE",
+            "vm_name": "task-a",
+        })
+        _, record = self.run_dispatch(access="link", link_stdout=real)
+        self.assertEqual(
+            record["url"], "https://task-a.exe.xyz/?share=T6TOKENTOKENTOKENTOKENTOKE"
+        )
+
     def test_a_custom_domain_becomes_the_url(self):
         sent, record = self.run_dispatch(
             access="public", extra="\n  domain: ld-dev.example.com"
