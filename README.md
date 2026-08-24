@@ -22,7 +22,6 @@ Each piece installs on its own if you'd rather not touch your shell or editor:
 | `link-codex.sh` | `unlink-codex.sh` | `~/.codex/` |
 | `link-opencode.sh` | `unlink-opencode.sh` | `~/.config/opencode/` |
 | `link-agent-memory.sh` | `unlink-agent-memory.sh` | `~/.local/bin/agent-memory` |
-| `link-agent-run.sh` | `unlink-agent-run.sh` | `~/.local/bin/agent-run` |
 
 Check an install with `./doctor.sh` (read-only, exits non-zero on the first dangling link) or `./list-symlink.sh`.
 
@@ -96,8 +95,7 @@ This layer instructs agents; it does not enforce against them, and it carries no
 | [`.ai/shared-instructions.md`](.ai/shared-instructions.md) | The operating rules themselves, and what each task file is for |
 | [`.ai/HARNESS.md`](.ai/HARNESS.md) | The machinery behind them — layer map, memory root layout, current-task resolution order, recovery |
 | [`.ai/skills/`](.ai/skills/) | Each procedure in full |
-| [`agent-run/README.md`](agent-run/README.md) | Running coding agents on disposable remote sandboxes |
-| [`docs/SETUP.md`](docs/SETUP.md) | A machine from nothing: git, GitHub, stacked PRs, remote agents |
+| [`docs/SETUP.md`](docs/SETUP.md) | A machine from nothing: git, GitHub, stacked PRs |
 | `agent-memory --help` | The CLI surface, including legacy-store migration |
 
 ---
@@ -123,8 +121,7 @@ Full keybindings in [`.config/nvim/KEYBINDINGS.md`](.config/nvim/KEYBINDINGS.md)
 ## tmux
 
 Stock tmux with comfort settings only — every default key binding is left alone,
-so what you learn transfers to any machine, including the remote VMs `agent-run`
-uses. Mouse on, 50k lines of scrollback, Kanagawa status bar to match Neovim.
+so what you learn transfers to any machine. Mouse on, 50k lines of scrollback, Kanagawa status bar to match Neovim.
 
 Keys and a troubleshooting table in [`.config/tmux/CHEATSHEET.md`](.config/tmux/CHEATSHEET.md).
 
@@ -141,7 +138,7 @@ Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/rom
 | [powerlevel10k](https://github.com/romkatv/powerlevel10k) | Shell theme |
 | [asdf](https://asdf-vm.com/) | Version management |
 | [fzf](https://github.com/junegunn/fzf) | Fuzzy finding |
-| [tmux](https://github.com/tmux/tmux) | Terminal multiplexing, `agent-run monitor` |
+| [tmux](https://github.com/tmux/tmux) | Terminal multiplexing |
 | [GitHub CLI](https://cli.github.com/) + `gh stack` | Shared workflow rules |
 | [Python](https://www.python.org/) >= 3.10 | `agent-memory` runtime |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Claude integration |

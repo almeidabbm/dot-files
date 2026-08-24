@@ -3,8 +3,7 @@
 tmux keeps terminals running when you close the window, and lets one screen hold
 several of them. That is the whole idea.
 
-Every key below is stock tmux, so it works on any machine — including the remote
-VMs `agent-run` starts agents on.
+Every key below is stock tmux, so it works on any machine.
 
 ## The one thing to internalise
 
@@ -81,23 +80,6 @@ Everything else above is stock. These are keys tmux leaves unbound:
 
 The status bar shows `PREFIX` when tmux is waiting for your second key — useful
 while the habit forms.
-
-## Watching remote agents
-
-`agent-run monitor` builds a session called `agent-run` with one window per live
-run, each streaming that run's output.
-
-```bash
-agent-run monitor        # build or refresh it
-tmux attach -t agent-run # watch
-# prefix n / prefix p to move between agents, prefix d to leave it running
-```
-
-Re-running `monitor` adds windows for new runs and prunes finished ones without
-disturbing the window you are watching.
-
-To drive one agent rather than watch it, `agent-run attach <name>` puts you
-inside the tmux session on that VM. `prefix d` detaches and leaves it working.
 
 ## When something looks wrong
 
