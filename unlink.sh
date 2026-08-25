@@ -51,7 +51,11 @@ echo "🔌 MCP configurations:"
 
 echo ""
 echo "🔧 Tool configurations:"
-"$(cd "$(dirname "$0")" && pwd)/unlink-agent-memory.sh"
+am="$HOME/.local/bin/agent-memory"
+if [[ -L "$am" ]] && [[ "$(readlink "$am")" == *"$HOME/Develop/dot-files/.ai/bin/agent-memory"* ]]; then
+    echo "  ❌ Removing legacy agent-memory CLI: $am"
+    rm "$am"
+fi
 remove_symlink "$HOME/.default-npm-packages" "NPM packages"
 remove_symlink "$HOME/.fzf.zsh" "FZF config (Linux)"
 remove_symlink "$HOME/.fzf.mac.zsh" "FZF config (macOS)"

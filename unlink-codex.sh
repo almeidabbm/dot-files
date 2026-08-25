@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Standalone script to remove only Codex symlinks.
-# Can be run independently without affecting other dotfiles.
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
 
@@ -10,7 +9,8 @@ remove_symlink() {
     local description="$2"
 
     if [[ -L "$target" ]]; then
-        local link_target=$(readlink "$target")
+        local link_target
+        link_target=$(readlink "$target")
         if [[ "$link_target" == *"$DOTFILES_DIR"* ]]; then
             echo "  ❌ Removing: $target -> $link_target"
             rm "$target"
@@ -27,11 +27,14 @@ remove_symlink() {
 echo "🧹 Cleaning up Codex symlinks..."
 remove_symlink "$HOME/.codex/AGENTS.md" "Codex global rules"
 
-for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
-    [[ -d "$skill_dir" ]] || continue
-    skill_name=$(basename "$skill_dir")
-    remove_symlink "$HOME/.codex/skills/$skill_name" "Codex skill: $skill_name"
-done
+if [[ -d "$HOME/.codex/skills" ]]; then
+    for link in "$HOME/.codex/skills"/*; do
+        [[ -L "$link" ]] || continue
+        if [[ "$(readlink "$link")" == *"$DOTFILES_DIR/.ai/skills"* ]]; then
+            remove_symlink "$link" "Codex skill: $(basename "$link")"
+        fi
+    done
+fi
 
 echo ""
 echo "🎉 Codex cleanup complete!"

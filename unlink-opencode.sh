@@ -9,9 +9,8 @@ remove_symlink() {
     local description="$2"
 
     if [[ -L "$target" ]]; then
-        local link_target=$(readlink "$target")
-        # Managed links point into this dot-files repo (shared rules and
-        # personal skills).
+        local link_target
+        link_target=$(readlink "$target")
         if [[ "$link_target" == *"$DOTFILES_DIR"* ]]; then
             echo "  🗑️  Removing: $target -> $link_target"
             rm "$target"
@@ -39,12 +38,14 @@ fi
 
 echo ""
 echo "👤 Removing personal skills from dot-files..."
-for skill in "$DOTFILES_DIR/.ai/skills"/*; do
-    if [[ -d "$skill" ]]; then
-        skill_name=$(basename "$skill")
-        remove_symlink "$HOME/.config/opencode/skills/$skill_name" "Skill: $skill_name"
-    fi
-done
+if [[ -d "$HOME/.config/opencode/skills" ]]; then
+    for link in "$HOME/.config/opencode/skills"/*; do
+        [[ -L "$link" ]] || continue
+        if [[ "$(readlink "$link")" == *"$DOTFILES_DIR/.ai/skills"* ]]; then
+            remove_symlink "$link" "Skill: $(basename "$link")"
+        fi
+    done
+fi
 
 echo ""
 echo "🎉 OpenCode configuration removed!"

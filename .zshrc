@@ -154,6 +154,3 @@ if command -v direnv &> /dev/null; then
 fi
 # claude code: native install (not brew) puts the binary in ~/.local/bin
 export PATH="$HOME/.local/bin:$PATH"
-
-# Shared task memory for Claude Code, Codex, OpenCode, and future remote agents.
-export AGENT_LOCAL_MEMORY_PATH="${AGENT_LOCAL_MEMORY_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/agent-memory}"

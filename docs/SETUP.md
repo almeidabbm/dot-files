@@ -1,15 +1,12 @@
 # Setup
 
-Getting a machine from nothing to running agents on remote sandboxes.
+Getting a machine from nothing to a working shell, editor, and agent tooling.
 
 Three parts, each usable on its own:
 
 1. [The machine](#the-machine) — clone, link, verify
 2. [Git and GitHub](#git-and-github) — identity, defaults, auth, keys
 3. [Working in a stack](#working-in-a-stack) — the stacked-PR workflow
-
-> Two links below — `.ai/HARNESS.md` and `.config/tmux/CHEATSHEET.md` — resolve once the
-> documentation stack (PRs #26–#29) merges. Everything else is live on this branch.
 
 ---
 
@@ -22,29 +19,20 @@ cd ~/Develop/dot-files
 ./doctor.sh        # read-only check; non-zero on the first dangling link
 ```
 
-`link.sh` projects `.ai/` into every agent tool's native location, so the workflow rules
-and skills are identical in Claude Code, Codex, and OpenCode. See
-[`.ai/HARNESS.md`](../.ai/HARNESS.md) for how that projection works and how to recover
-when it breaks.
+`link.sh` projects [`.ai/shared-instructions.md`](../.ai/shared-instructions.md) into each
+agent tool's native path (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
+`~/.config/opencode/AGENTS.md`) so Claude Code, Codex, and OpenCode share the same
+operating rules.
 
 Dependencies worth having before you start:
 
 ```bash
-brew install git gh jq tmux
+brew install git gh tmux
 gh extension install github/gh-stack
 ```
 
-`jq` and `tmux` are not optional for this workflow: `jq` parses provider JSON, and `tmux`
-is what keeps a remote agent alive after you disconnect.
-
-`link.sh` puts the workflow CLI on your PATH via `~/.local/bin`:
-
-```bash
-agent-memory root      # workflow state
-```
-
-If your shell cannot find it, `~/.local/bin` is not on `PATH` — add it to `.zshrc`, or
-run the installer directly with `./link-agent-memory.sh`.
+If `~/.local/bin` is not on your `PATH`, add it to `.zshrc` (the linked `.zshrc` already
+does this).
 
 ---
 

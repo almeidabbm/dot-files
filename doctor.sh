@@ -2,8 +2,7 @@
 
 # Read-only health check for dot-files.
 # Verifies that every symlink this repo is supposed to create exists and
-# resolves, and that the shared AI rules + skills are projected into each
-# tool. Makes NO changes.
+# resolves. Makes NO changes.
 # Exits non-zero if any check fails, so it is safe to use in scripts/CI.
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
@@ -12,8 +11,6 @@ SHARED=".ai/shared-instructions.md"
 pass=0
 fail=0
 
-# A symlink is healthy when it is a link, resolves to a real file/dir, and
-# its target contains the expected dot-files substring.
 check_link() {
     local target="$1"
     local expected_substr="$2"
@@ -31,28 +28,16 @@ check_link() {
     fi
 }
 
-check_path() {
-    local path="$1"
-    local desc="$2"
-    if [[ -e "$path" ]]; then
-        echo "  ✅ $desc"
-        ((pass++))
-    else
-        echo "  ❌ $desc — not found ($path)"
-        ((fail++))
-    fi
-}
-
-check_command() {
-    local command_path="$1"
+check_absent() {
+    local target="$1"
     local desc="$2"
 
-    if [[ -x "$command_path" ]] && "$command_path" root >/dev/null 2>&1; then
+    if [[ -e "$target" ]] || [[ -L "$target" ]]; then
+        echo "  ❌ $desc — still present ($target); run link-*.sh to clear"
+        ((fail++))
+    else
         echo "  ✅ $desc"
         ((pass++))
-    else
-        echo "  ❌ $desc — command failed ($command_path)"
-        ((fail++))
     fi
 }
 
@@ -74,21 +59,10 @@ fi
 
 echo ""
 echo "📜 Shared AI rules (one source -> three tools)"
-check_link "$HOME/.local/bin/agent-memory" "/dot-files/.ai/bin/agent-memory" "Agent memory CLI"
-check_command "$HOME/.local/bin/agent-memory" "Agent memory root resolution"
 check_link "$HOME/.claude/CLAUDE.md" "$SHARED" "Claude   global rules"
 check_link "$HOME/.codex/AGENTS.md" "$SHARED" "Codex    global rules"
 check_link "$HOME/.config/opencode/AGENTS.md" "$SHARED" "OpenCode global rules"
-
-echo ""
-echo "🧩 Shared skills (per tool)"
-for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
-    [[ -d "$skill_dir" ]] || continue
-    name=$(basename "$skill_dir")
-    check_link "$HOME/.claude/skills/$name" "/dot-files/.ai/skills/$name" "Claude   skill: $name"
-    check_link "$HOME/.codex/skills/$name" "/dot-files/.ai/skills/$name" "Codex    skill: $name"
-    check_link "$HOME/.config/opencode/skills/$name" "/dot-files/.ai/skills/$name" "OpenCode skill: $name"
-done
+check_absent "$HOME/.local/bin/agent-memory" "Legacy agent-memory CLI absent"
 
 echo ""
 echo "────────────────────────────────────────"

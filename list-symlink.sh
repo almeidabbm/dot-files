@@ -12,21 +12,13 @@ targets=(
     "$HOME/.default-npm-packages|Default NPM packages"
     "$HOME/.fzf.zsh|FZF config (Linux)"
     "$HOME/.fzf.mac.zsh|FZF config (macOS)"
-    "$HOME/.local/bin/agent-memory|Agent memory CLI"
 )
 
 if [[ -f "$DOTFILES_DIR/.ai/shared-instructions.md" ]]; then
     targets+=("$HOME/.claude/CLAUDE.md|Claude global rules")
     targets+=("$HOME/.codex/AGENTS.md|Codex global rules")
+    targets+=("$HOME/.config/opencode/AGENTS.md|OpenCode global rules")
 fi
-
-for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
-    [[ -d "$skill_dir" ]] || continue
-    skill_name=$(basename "$skill_dir")
-    targets+=("$HOME/.claude/skills/$skill_name|Claude skill: $skill_name")
-    targets+=("$HOME/.codex/skills/$skill_name|Codex skill: $skill_name")
-    targets+=("$HOME/.config/opencode/skills/$skill_name|OpenCode personal skill: $skill_name")
-done
 
 echo ""
 echo "🔗 Dot-files symlinks"

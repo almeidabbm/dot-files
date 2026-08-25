@@ -4,13 +4,13 @@
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
 
-# Function to remove symlink if it exists and points to dot-files
 remove_symlink() {
     local target="$1"
     local description="$2"
 
     if [[ -L "$target" ]]; then
-        local link_target=$(readlink "$target")
+        local link_target
+        link_target=$(readlink "$target")
         if [[ "$link_target" == *"$DOTFILES_DIR"* ]]; then
             echo "  ❌ Removing: $target -> $link_target"
             rm "$target"
@@ -27,12 +27,15 @@ remove_symlink() {
 echo "🤖 Cleaning up Claude Code symlinks..."
 remove_symlink "$HOME/.claude/CLAUDE.md" "Claude global rules"
 
-# Remove every shared skill folder symlinked into Claude
-for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
-    [[ -d "$skill_dir" ]] || continue
-    skill_name=$(basename "$skill_dir")
-    remove_symlink "$HOME/.claude/skills/$skill_name" "Claude skill: $skill_name"
-done
+# Remove any leftover skill links that pointed into this repo's .ai/skills/
+if [[ -d "$HOME/.claude/skills" ]]; then
+    for link in "$HOME/.claude/skills"/*; do
+        [[ -L "$link" ]] || continue
+        if [[ "$(readlink "$link")" == *"$DOTFILES_DIR/.ai/skills"* ]]; then
+            remove_symlink "$link" "Claude skill: $(basename "$link")"
+        fi
+    done
+fi
 
 echo ""
 echo "🎉 Claude Code cleanup complete!"
