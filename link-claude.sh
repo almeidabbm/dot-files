@@ -5,7 +5,6 @@
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
 
-# Function to create symlink with better output
 create_symlink() {
     local source="$1"
     local target="$2"
@@ -20,16 +19,32 @@ create_symlink() {
     fi
 }
 
-echo "🤖 Setting up Claude Code configuration..."
-"$DOTFILES_DIR/link-agent-memory.sh"
-create_symlink "$DOTFILES_DIR/.ai/shared-instructions.md" "$HOME/.claude/CLAUDE.md" "Claude global rules"
+remove_repo_skill_links() {
+    local skills_dir="$1"
+    local label="$2"
+    [[ -d "$skills_dir" ]] || return 0
+    local link
+    for link in "$skills_dir"/*; do
+        [[ -L "$link" ]] || continue
+        if [[ "$(readlink "$link")" == *"$DOTFILES_DIR/.ai/skills"* ]]; then
+            rm "$link"
+            echo "  🗑️  Removed stale $label skill: $(basename "$link")"
+        fi
+    done
+}
 
-# Symlink every shared skill folder under .ai/skills/
-for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
-    [[ -d "$skill_dir" ]] || continue
-    skill_name=$(basename "$skill_dir")
-    create_symlink "$skill_dir" "$HOME/.claude/skills/$skill_name" "Claude skill: $skill_name"
-done
+remove_agent_memory_cli() {
+    local target="$HOME/.local/bin/agent-memory"
+    if [[ -L "$target" ]] && [[ "$(readlink "$target")" == *"$DOTFILES_DIR/.ai/bin/agent-memory"* ]]; then
+        rm "$target"
+        echo "  🗑️  Removed legacy agent-memory CLI"
+    fi
+}
+
+echo "🤖 Setting up Claude Code configuration..."
+remove_agent_memory_cli
+create_symlink "$DOTFILES_DIR/.ai/shared-instructions.md" "$HOME/.claude/CLAUDE.md" "Claude global rules"
+remove_repo_skill_links "$HOME/.claude/skills" "Claude"
 
 echo ""
 echo "🎉 Claude Code setup complete!"

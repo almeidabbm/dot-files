@@ -36,8 +36,6 @@ Stacking is native to GitHub via the `gh stack` extension (public preview). Inst
 
 - Worktrees live inside the repo at `$(git rev-parse --show-toplevel)/.worktrees/<feature>/` and must stay gitignored.
 - Create them from trunk: `git worktree add .worktrees/<feature> trunk`.
-- Task memory is global; never copy or symlink a repository `.local` into a worktree.
-- Bind the worktree to its task after creation: `agent-memory bind <task-id-or-slug> --repo .worktrees/<feature>`.
 - Copy `.env*` and `.envrc` from the main repo into the worktree, ignoring missing files.
 - Run `docker compose` from inside the worktree directory when compose files use relative paths.
 - Remind the user to clean up finished worktrees with `git worktree remove .worktrees/<feature>`.
@@ -65,76 +63,16 @@ Stacking is native to GitHub via the `gh stack` extension (public preview). Inst
 - When fixing a bug, write a failing test that reproduces it before writing the fix, and keep it as the regression test.
 - New behavior ships with tests in the same branch as the change.
 
-## Active Task Convention
+## Tickets And Scope
 
-Workflow memory is task-centric and independent of repository checkouts. Resolve
-its root with `agent-memory root`; `AGENT_LOCAL_MEMORY_PATH` overrides the safe
-default under the user's local data directory. Never guess or hard-code the
-resolved path.
-
-Active tasks live under `<memory-root>/tasks/active/`; archived tasks live under
-`<memory-root>/tasks/archive/`. A task can reference multiple repositories and
-has five files:
-
-- `task.json` - machine-readable stable identity and repository bindings
-- `spec.md` - the what and why: goal, scope (in / out), success criteria, and open questions. Agreed with the human before any planning or implementation.
-- `plan.md` - the how: the implementation steps or PR decomposition derived from the approved spec.
-- `notes.md` - running log plus status frontmatter
-- `review.md` - pre-merge findings and hardening notes
-
-`notes.md` frontmatter is the workflow source of truth:
-
-```markdown
----
-id: task_<stable-id>
-slug: YYYY-MM-DD-<kebab>
-ticket: <link-or-id-or-empty>
-repositories: [{"id":"host/org/repo","role":"primary"}]
-size: quick | standard | big
-status: spec | plan | implementing | review | ready-to-ship | merged | archived
-last-updated: <ISO timestamp>
----
-```
-
-- Never select a current task by directory modification time. Resolve it with
-  `agent-memory current --repo <checkout>`, which uses explicit session identity,
-  checkout/branch bindings, then an unambiguous repository match.
-- Attach another repository with `agent-memory add-repo <task> --repo <checkout> --role <role>`.
-- Archive through `agent-memory archive <task>` after completing the archive workflow.
-- Durable architectural intelligence is repository-scoped. Resolve its directory
-  with `agent-memory system-map --repo <checkout>` and use the existing `inv-`,
-  `area-`, `danger-`, and `pitfall-` prefixes.
-- Machine-specific checkout paths, migration reports, task contents, and private
-  tracker references stay in the local memory root. Do not publish them to issues,
-  commits, CI logs, or PR descriptions.
-
-## Workflow Guidance
-
-- When the user starts new work, mentions an issue, or wants to scope a feature, use the `start-task` workflow.
-- When the user asks what they were working on or seems disoriented, use the `status` workflow.
-- When implementation is done and tests pass, use the `pre-merge` workflow before shipping.
-- After a PR is merged or the user wants to wrap up the task, use the `archive-task` workflow.
-- Harness mechanics live in `.ai/HARNESS.md` in the dot-files repo: read it when a task binding is ambiguous, `agent-memory` is missing, or you are changing the harness itself.
-
-## Spec And Plan Files
-
-- Resolve the current task directory with `agent-memory current --repo <checkout>`;
-  its spec and plan are `spec.md` and `plan.md` inside that directory.
-- These paths override the default output locations of any planning workflow or plan mode. Do not save task specs or plans to `docs/`, `docs/plans/`, `../<repo>_plans/`, or any other external or repo-tracked location while the task is active.
-- If no current task resolves, start or explicitly bind the task before writing a spec or plan.
-- Draft plans with the tool's native plan mode (Claude Code Plan Mode, Codex plan mode, OpenCode's plan agent). When the human approves a plan, save it to the current task's `plan.md` before implementing.
-
-## Tickets And Specs
-
-- A ticket link or ID in the `ticket:` frontmatter can point at any tracker (Linear, GitHub Issues, or other). Never hardcode workflow behavior to one tracker.
-- The ticket owns the problem statement; `spec.md` owns the agreed solution. Link to the ticket rather than copying it.
-- When a task starts from a ticket, fetch it once into `spec.md`'s Goal section — a short summary plus a source line (`Fetched from <link> on <date>`) — using whatever access the session has (MCP tool, `gh issue view`, or ask the user to paste it). Then record only the delta the ticket lacks: scope in/out, success criteria, chosen approach.
-- If the ticket changes mid-task, the local spec wins until a human re-syncs it deliberately.
+- The ticket (Linear, GitHub Issues, or other) owns the problem statement and status.
+- For larger work, record agreed scope, success criteria, and chosen approach in the ticket or PR description before implementing.
+- Prefer open PRs and tracker status as the handoff surface across sessions.
+- Never hardcode workflow behavior to one tracker.
 
 ## Per-Repo Gitignore
 
-Every repo using this workflow should continue to gitignore legacy local memory
-and worktrees while migration sources are retained:
+Every repo using worktrees should gitignore them (and any leftover legacy local memory dirs):
 
 ```gitignore
 .local/

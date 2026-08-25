@@ -19,17 +19,34 @@ create_symlink() {
     fi
 }
 
-echo "🧠 Setting up Codex configuration..."
-"$DOTFILES_DIR/link-agent-memory.sh"
-create_symlink "$DOTFILES_DIR/.ai/shared-instructions.md" "$HOME/.codex/AGENTS.md" "Codex global rules"
+remove_repo_skill_links() {
+    local skills_dir="$1"
+    local label="$2"
+    [[ -d "$skills_dir" ]] || return 0
+    local link
+    for link in "$skills_dir"/*; do
+        [[ -L "$link" ]] || continue
+        if [[ "$(readlink "$link")" == *"$DOTFILES_DIR/.ai/skills"* ]]; then
+            rm "$link"
+            echo "  🗑️  Removed stale $label skill: $(basename "$link")"
+        fi
+    done
+}
 
-for skill_dir in "$DOTFILES_DIR"/.ai/skills/*/; do
-    [[ -d "$skill_dir" ]] || continue
-    skill_name=$(basename "$skill_dir")
-    create_symlink "$skill_dir" "$HOME/.codex/skills/$skill_name" "Codex skill: $skill_name"
-done
+remove_agent_memory_cli() {
+    local target="$HOME/.local/bin/agent-memory"
+    if [[ -L "$target" ]] && [[ "$(readlink "$target")" == *"$DOTFILES_DIR/.ai/bin/agent-memory"* ]]; then
+        rm "$target"
+        echo "  🗑️  Removed legacy agent-memory CLI"
+    fi
+}
+
+echo "🧠 Setting up Codex configuration..."
+remove_agent_memory_cli
+create_symlink "$DOTFILES_DIR/.ai/shared-instructions.md" "$HOME/.codex/AGENTS.md" "Codex global rules"
+remove_repo_skill_links "$HOME/.codex/skills" "Codex"
 
 echo ""
-echo "  ℹ️  Restart Codex if it is already open so it reloads AGENTS.md and skills"
+echo "  ℹ️  Restart Codex if it is already open so it reloads AGENTS.md"
 echo ""
 echo "🎉 Codex setup complete!"

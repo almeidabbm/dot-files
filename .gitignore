@@ -1,6 +1,6 @@
 .DS_STORE
 
-# Project intelligence — working memory, not for commit
+# Leftover local working memory (not for commit)
 .local/
 
 # Worktrees — checked out elsewhere via `git worktree`
