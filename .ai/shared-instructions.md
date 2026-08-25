@@ -40,6 +40,11 @@ Stacking is native to GitHub via the `gh stack` extension (public preview). Inst
 - Run `docker compose` from inside the worktree directory when compose files use relative paths.
 - Remind the user to clean up finished worktrees with `git worktree remove .worktrees/<feature>`.
 
+## Sessions
+
+- One task per conversation. Start a fresh session between unrelated tasks.
+- If the change is not a one-sentence diff, plan (or stack-decompose) before implementing.
+
 ## Stacking Work
 
 - For larger changes, break the work into a stack of small, reviewable PRs.
