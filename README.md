@@ -36,7 +36,25 @@ Operating rules for agents live in [`.ai/shared-instructions.md`](.ai/shared-ins
 | Codex | `~/.codex/AGENTS.md` |
 | OpenCode | `~/.config/opencode/AGENTS.md` |
 
-They cover git/stacking, worktrees, commits, testing, tickets/scope, and code style. This layer instructs agents; it does not enforce against them. Branch policy belongs to each repository.
+The entry file contains task, delegation, verification, and style rules. It loads detailed guidance only when relevant:
+
+| File | Read when |
+| --- | --- |
+| [Git workflow](.ai/git-workflow.md) | Starting implementation or managing branches, stacks, worktrees, commits, or PRs |
+| [Delegation](.ai/delegation.md) | Assigning bounded work to another agent |
+| [Worker models](.ai/models.md) | Choosing a worker model and execution tool |
+
+Start your preferred agent normally. The workflow does not depend on the main agent's model or require a custom launcher. Supporting paths use `~/Develop/dot-files/.ai/`, matching the install scripts; update them if you change the installation location. This layer instructs agents; it does not enforce against them. Branch policy belongs to each repository.
+
+For Cursor Agent chat, add this pointer to **User Rules** in Cursor's rules settings:
+
+```text
+At the start of each task, read and follow ~/Develop/dot-files/.ai/shared-instructions.md.
+```
+
+Cursor's global User Rules apply to Agent chat, not Tab or inline editing ([Cursor rules](https://cursor.com/docs/rules)). The `link-*.sh` scripts currently install rules for the three tools in the table; they do not configure Cursor or Grok. For another local agent, add the same pointer to its supported instruction mechanism and verify that it can read the file. External workers also receive explicit instruction paths in their brief.
+
+The [research and audit notes](docs/ai-workflow-research.md) explain the evidence and tradeoffs. To evaluate a rule change, use a small direct edit, an independent investigation, and a scoped implementation/review task. Check instruction loading, delegation choices, file ownership, and actual verification; compare rework and usage with the previous workflow. Static link checks alone do not establish better agent behavior.
 
 ---
 

@@ -1,0 +1,44 @@
+# Research: shared instructions and agent delegation
+
+Researched 2026-09-08. Scope: the shared `.ai` workflow across coding-agent hosts. This note records evidence and proposed local policy; it is not an always-loaded instruction file. No claim here establishes a universal model ranking or a measured improvement for this repository.
+
+## Evidence from primary sources
+
+| Finding | Source and qualification |
+| --- | --- |
+| Briefs should identify the goal, relevant context, constraints, and completion criteria. Reusable guidance should stay short and accurate, and verification should establish the intended outcome. | [OpenAI Codex best practices](https://learn.chatgpt.com/guides/best-practices). Official workflow guidance. |
+| Start parallel work with bounded exploration, triage, and summaries. Concurrent editing needs more coordination; subagents add token overhead. Applicable project or skill instructions can request delegation. | [OpenAI subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents). Native host controls and permissions still govern execution. |
+| Keep startup instructions limited to broadly applicable rules and non-obvious conventions. Move occasional workflows to on-demand material. Review and prune instructions, and observe whether edits improve behavior. Give agents executable completion checks and inspect evidence. Small, clear changes need less planning. | [Claude Code best practices](https://code.claude.com/docs/en/best-practices). Official product guidance, not a controlled comparison of our workflow. |
+| Use explicit, direct instructions with enough detail to guide decisions; avoid both brittle scripted reasoning and vague goals. Retrieve context through file paths and other references as needed. Start minimally, adding instructions in response to observed failures. | [Anthropic context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents), published 2025-09-29. Engineering guidance. |
+| Rules should be focused, actionable, and scoped. Reference source files instead of duplicating their contents. Cursor has project rules and global User Rules; host-specific loading must be configured explicitly. | [Cursor rules](https://cursor.com/docs/rules). Product behavior is version-dependent. |
+| Workers need a self-contained brief: Cursor subagents start without prior conversation history. Context isolation and independent verification are useful, but startup latency and token costs can outweigh benefits for simple tasks. Workers share the checkout by default; concurrent edits can collide, so isolated project copies are supported. A requested model can fall back because of account or administrator restrictions. | [Cursor subagents](https://cursor.com/docs/subagents). These are Cursor capabilities, not guarantees for every host. |
+| Useful delegation briefs state the objective, output format, tools/sources, and boundaries. Parallel research can benefit from independent context, but tasks with substantial shared context and dependencies are poor candidates. Anthropic specifically cautions that coding often has fewer parallelizable subtasks than research. | [Anthropic multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system), published 2025-06-13. Findings concern its research system and contemporary models; its performance gains should not be treated as coding benchmarks. |
+| Adding context files does not automatically improve success. An evaluation of generated and developer-committed files reported no general task-success improvement and over 20% greater average inference cost. Non-standard practices remain a useful purpose; the authors recommend evaluation of performance claims. | [Gloaguen et al., Evaluating AGENTS.md, v2](https://arxiv.org/abs/2602.11988v2), revised 2026-06-23. Results apply to the tested tasks, agents, and file contents. |
+| Evidence is not uniformly negative: another study of 124 pull requests across 10 repositories associated context files with lower median runtime and output token use and comparable completion behavior. | [Lulla et al., On the Impact of AGENTS.md Files, v2](https://arxiv.org/abs/2601.20404v2), revised 2026-03-30. Efficiency and completion behavior are different measurements from comprehensive correctness. |
+| Multi-agent benefits depend on task structure. Controlled comparisons found gains for parallelizable work and losses on sequential tasks. | [Google Research report](https://research.google/blog/towards-a-science-of-scaling-agent-systems-when-and-why-agent-systems-work/), published 2026-01-28, and [the primary paper](https://arxiv.org/abs/2512.08296). The benchmarks cover reasoning, browsing, planning, and tool use; they do not establish a model-routing policy for this codebase. |
+
+## Audit before changes (commit `2bdd178`)
+
+The original shared file already captured useful personal conventions: repository-owned branch policy, Conventional Commits, focused testing, bug regression tests, and ticket/PR handoffs. Its symlink-based single source of truth avoided maintaining separate Claude, Codex, and OpenCode copies. These conventions are retained in [the shared instructions](../.ai/shared-instructions.md), [Git workflow](../.ai/git-workflow.md), and [README](../README.md).
+
+The main opportunity is information placement. Detailed stack commands and worktree procedures apply only to some tasks but were always loaded. Delegation lacked a definition of a useful work boundary, a required context brief, ownership rules, and evidence-based completion. Model names or guessed strengths would introduce another maintenance burden if treated as permanent workflow facts.
+
+## Applied local policy
+
+These choices apply the evidence to this user's workflow; they are not vendor requirements:
+
+- Keep personal invariants and short conditional pointers in the shared file. Put Git procedures, delegation mechanics, and worker selection in separate files loaded when relevant. Preserve the user's existing Git/testing/scope requirements while moving them. Trigger the Git reference before implementation so the sync requirement is discovered before edits begin.
+- Define the main agent by responsibility: it owns scope, decisions, integration, and reporting. Its identity and model are irrelevant to the instructions.
+- Work directly on simple changes and tightly dependent reasoning. Delegate when a bounded investigation, implementation, or independent review benefits from separate context or can progress independently. Prefer direct tool calls for short lookups and mechanical operations.
+- Give workers the objective, relevant decisions, source paths, applicable rules, edit ownership, acceptance criteria, and expected evidence. Pass only the context they need. Return findings, changed files, actual verification results, and unresolved issues.
+- Parallelize independent read-only work freely within host limits. For editing, assign disjoint ownership or separate worktrees; coordinate shared files, Git operations, tests using shared state, and final integration centrally. A fresh context does not imply a separate filesystem.
+- Select a model and execution route separately. Resolve actual supported identifiers through the current tool, preserve permission boundaries, and report substitutions when visible. Use task complexity, tools, observed results, and user usage preferences instead of fixed provider stereotypes. Preserve explicit user selections.
+- Verify the changed behavior and acceptance criteria, including the combined result after integration. Inspect partial work before retrying; change the brief, model, or approach when failures repeat.
+
+## Validation and maintenance
+
+Structural checks establish that pointers and host setup work, not that the policy improves development. Validate instruction loading in each actual host before calling an integration complete. For cloud hosts, provide the files inside the accessible checkout rather than assuming a local home-directory path exists.
+
+Evaluate behavior with representative tasks: a tiny edit that stays local, an investigation that returns cited evidence, a scoped implementation with tests, and an independent review that identifies a seeded defect. Observe correctness, missed constraints, manual handoffs, time, and reported usage. Compare against the previous workflow where practical and repeat enough to separate recurring effects from individual runs.
+
+When a rule fails, inspect its trigger, wording, conflicts, and tool support before adding more text. Remove redundant or stale rules; keep useful corrections tied to observed failures. Account availability and public docs change, so recheck launch syntax and model options when the environment changes. Instructions guide behavior; host permissions, tests, and CI supply actual execution boundaries and checks.
