@@ -4,6 +4,7 @@
 # Can be run independently without affecting other dotfiles.
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
+shopt -s nullglob
 
 create_symlink() {
     local source="$1"
@@ -34,6 +35,21 @@ prune_dangling_links() {
     done
 }
 
+# Drop every link into this repo's .ai/skills/ from a directory that is no longer a skill location.
+remove_legacy_skill_links() {
+    local dir="$1"
+    local label="$2"
+    [[ -d "$dir" ]] || return 0
+    local link
+    for link in "$dir"/*; do
+        [[ -L "$link" ]] || continue
+        if [[ "$(readlink "$link")" == "$DOTFILES_DIR/.ai/skills/"* ]]; then
+            rm "$link"
+            echo "  🗑️  Removed legacy $label: $(basename "$link")"
+        fi
+    done
+}
+
 remove_agent_memory_cli() {
     local target="$HOME/.local/bin/agent-memory"
     if [[ -L "$target" ]] && [[ "$(readlink "$target")" == *"$DOTFILES_DIR/.ai/bin/agent-memory"* ]]; then
@@ -49,7 +65,7 @@ create_symlink "$DOTFILES_DIR/.ai/shared-instructions.md" "$HOME/.codex/AGENTS.m
 echo ""
 echo "🧩 Skills (~/.agents/skills, read by Codex and OpenCode)"
 prune_dangling_links "$HOME/.agents/skills" "shared skill"
-prune_dangling_links "$HOME/.codex/skills" "legacy Codex skill"
+remove_legacy_skill_links "$HOME/.codex/skills" "Codex skill"
 for skill in "$DOTFILES_DIR"/.ai/skills/*/; do
     name="$(basename "$skill")"
     create_symlink "${skill%/}" "$HOME/.agents/skills/$name" "Skill $name"
@@ -61,6 +77,8 @@ prune_dangling_links "$HOME/.codex/agents" "Codex agent"
 for agent in "$DOTFILES_DIR"/.ai/agents/codex/*.toml; do
     create_symlink "$agent" "$HOME/.codex/agents/$(basename "$agent")" "Agent $(basename "$agent" .toml)"
 done
+echo ""
+echo "🤝 Shared (~/.agents, used by every host; removed only by unlink.sh)"
 create_symlink "$DOTFILES_DIR/.ai/agents/roles" "$HOME/.agents/roles" "Role briefs for CLI workers"
 
 echo ""

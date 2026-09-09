@@ -1,6 +1,6 @@
 ---
 name: git-workflow
-description: Personal Git conventions for trunk sync, gh stack stacked PRs and their fallbacks, worktrees under .worktrees/, commits, and PR submission. Load before the first branch, commit, stack, worktree, or PR operation in a task, and when gh stack or a rebase fails.
+description: Personal Git conventions for trunk sync, gh stack stacked PRs and their fallbacks, worktrees under .worktrees/, commits, and PR submission. Load before starting implementation (trunk sync comes first), before the first branch, commit, stack, worktree, or PR operation in a task, and when gh stack or a rebase fails.
 ---
 
 # Git Workflow

@@ -3,6 +3,7 @@
 # Standalone script to remove only Claude Code symlinks.
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
+shopt -s nullglob
 
 remove_symlink() {
     local target="$1"
@@ -33,7 +34,7 @@ remove_repo_links() {
     local link
     for link in "$dir"/*; do
         [[ -L "$link" ]] || continue
-        if [[ "$(readlink "$link")" == "$DOTFILES_DIR/.ai/$subdir"* ]]; then
+        if [[ "$(readlink "$link")" == "$DOTFILES_DIR/.ai/$subdir/"* ]]; then
             remove_symlink "$link" "$label: $(basename "$link")"
         fi
     done
@@ -43,7 +44,8 @@ echo "🤖 Cleaning up Claude Code symlinks..."
 remove_symlink "$HOME/.claude/CLAUDE.md" "Claude global rules"
 remove_repo_links "$HOME/.claude/skills" "skills" "Claude skill"
 remove_repo_links "$HOME/.claude/agents" "agents" "Claude agent"
-remove_symlink "$HOME/.agents/roles" "Role briefs for CLI workers"
 
+echo ""
+echo "  ℹ️  Shared ~/.agents links stay until unlink.sh removes them"
 echo ""
 echo "🎉 Claude Code cleanup complete!"

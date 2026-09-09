@@ -35,20 +35,22 @@ These choices apply the evidence to this user's workflow; they are not vendor re
 - Select a model and execution route separately. Resolve actual supported identifiers through the current tool, preserve permission boundaries, and report substitutions when visible. Use task complexity, tools, observed results, and user usage preferences instead of fixed provider stereotypes. Preserve explicit user selections.
 - Verify the changed behavior and acceptance criteria, including the combined result after integration. Inspect partial work before retrying; change the brief, model, or approach when failures repeat.
 
-## Measured after two weeks (2026-09-09)
+## Measured before the skill conversion (2026-09-09)
 
-The 2026-09-08 layout kept procedures in files reached by "read `~/Develop/dot-files/.ai/<file>` before X" pointers. Claude Code transcripts from 2026-08-25 to 2026-09-09 (61 top-level sessions) show how often those pointers fired versus native mechanisms:
+Commit `bdf331f` on 2026-09-08 introduced the "read `~/Develop/dot-files/.ai/<file>` before X" pointers. Claude Code transcripts from 2026-09-08 to 2026-09-09 (21 top-level sessions, one day of use) show how often those pointers fired versus the host's native mechanisms:
 
 | Signal | Sessions |
 | --- | --- |
-| Actually read `delegation.md` | 2 |
-| Actually read `models.md` | 1 |
-| Actually read `git-workflow.md` | 3 |
-| Invoked a skill | 30 |
-| Used the Agent tool | 23 (47 calls; 6 passed a model, the rest defaulted to `general-purpose` on the parent's model) |
-| Launched an external worker (`codex exec`, `claude -p`, `cursor-agent`) | 0 |
+| Actually read `delegation.md` | 3 |
+| Actually read `models.md` | 2 |
+| Actually read `git-workflow.md` | 4 |
+| Performed a commit, branch, stack, or PR operation | 4 |
+| Invoked any skill | 15 |
+| Used the Agent tool | 15 |
 
-Path pointers fired in roughly 5% of sessions; skill descriptions fired in half. No host had a custom agent defined, so the roles described in `delegation.md` were not selectable, and model choice defaulted to inheriting the parent. The 2026-09-09 change moves the Git and delegation procedures into skills, defines the three roles as host-native agents rendered from one source, and makes provider, model, and effort an explicit per-spawn decision with the exact cross-provider CLI commands in the skill. The counts above are the baseline to compare against.
+Over the wider window since 2026-08-25 (61 sessions), 47 Agent calls were made and 6 passed a model; the rest defaulted to `general-purpose` on the parent's model. No host had a custom agent defined, so the roles described in `delegation.md` were not selectable, and no session launched an external worker CLI.
+
+This is one day of pointer data and a coarse grep, not a controlled comparison; it shows that skills are the mechanism the host already surfaces and that delegation had nothing concrete to target. The 2026-09-09 change moves the Git and delegation procedures into skills, defines the three roles as host-native agents rendered from one source, and makes provider, model, and effort an explicit per-spawn decision with the exact cross-provider CLI commands in the skill. Recount these signals after a comparable period to see whether skill loads and role-targeted spawns replaced the pointer reads.
 
 ## Validation and maintenance
 

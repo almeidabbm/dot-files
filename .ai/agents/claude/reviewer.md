@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Independent reviewer that checks a diff against its spec and the repository's conventions and returns evidence-backed findings. Use proactively before submitting a PR and after an implementer returns.
+description: "Independent reviewer that checks a diff against its spec and the repository's conventions and returns evidence-backed findings. Use proactively before submitting a PR and after an implementer returns."
 disallowedTools: Edit, Write, NotebookEdit
 ---
 

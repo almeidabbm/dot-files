@@ -3,6 +3,7 @@
 # Script to unlink and remove OpenCode configuration.
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
+shopt -s nullglob
 
 remove_symlink() {
     local target="$1"
@@ -33,7 +34,7 @@ remove_repo_links() {
     local link
     for link in "$dir"/*; do
         [[ -L "$link" ]] || continue
-        if [[ "$(readlink "$link")" == "$DOTFILES_DIR/.ai/$subdir"* ]]; then
+        if [[ "$(readlink "$link")" == "$DOTFILES_DIR/.ai/$subdir/"* ]]; then
             remove_symlink "$link" "$label: $(basename "$link")"
         fi
     done
@@ -41,10 +42,10 @@ remove_repo_links() {
 
 echo "🗑️  Removing OpenCode configuration..."
 remove_symlink "$HOME/.config/opencode/AGENTS.md" "OpenCode global rules"
-remove_repo_links "$HOME/.agents/skills" "skills" "Shared skill"
 remove_repo_links "$HOME/.config/opencode/skills" "skills" "Legacy OpenCode skill"
 remove_repo_links "$HOME/.config/opencode/agents" "agents" "OpenCode agent"
-remove_symlink "$HOME/.agents/roles" "Role briefs for CLI workers"
 
+echo ""
+echo "  ℹ️  Shared ~/.agents links stay until unlink.sh removes them"
 echo ""
 echo "🎉 OpenCode configuration removed!"

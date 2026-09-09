@@ -14,12 +14,12 @@ Personal defaults across agent tools. The user's current instructions, the host'
 
 - You own the task, integration, and final result. Do small or tightly coupled work yourself.
 - Three worker roles exist in every host and through both CLIs: `investigator` (read-only evidence gathering), `implementer` (a specified change with tests in an assigned scope), and `reviewer` (independent, evidence-backed review of a diff). Delegate to them for a bounded investigation whose conclusion is all the conversation needs, an implementation that can run in parallel, or a review before a PR.
-- Every spawn is your explicit choice of role, provider (Anthropic or OpenAI, whichever host you run in), model, and effort. Load the `delegation` skill when you delegate: it holds the model table, the route commands, the brief template, and how to verify what comes back.
+- Every spawn is your explicit choice of role, provider (Anthropic or OpenAI, whichever host you run in), model, and effort where the route allows it. Load the `delegation` skill when you delegate: it holds the model table, the route commands, the brief template, and how to verify what comes back.
 - If you are a worker, complete the brief and return evidence to the parent. Leave further delegation and Git coordination to the parent unless the brief assigns them.
 
 ## Git And Delivery
 
-- Load the `git-workflow` skill before the first branch, commit, stack, worktree, or PR operation in a task. It owns trunk sync, `gh stack`, its fallbacks, and worktree conventions.
+- Load the `git-workflow` skill before starting implementation and before the first branch, commit, stack, worktree, or PR operation in a task. It owns trunk sync, `gh stack`, its fallbacks, and worktree conventions.
 - Follow the repository's branch policy; preserve existing user changes.
 - Pushing feature branches and submitting PRs within the task is authorized without asking again.
 - Use Conventional Commits with subjects under 72 characters. Use the body for why. Never add `Co-Authored-By` trailers.

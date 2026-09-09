@@ -1,5 +1,7 @@
 #!/bin/bash
 
+shopt -s nullglob
+
 echo "🧹 Cleaning up symlinks pointing to dot-files..."
 
 # Function to remove symlink if it exists and points to dot-files
@@ -44,6 +46,18 @@ echo ""
 
 echo ""
 "$(cd "$(dirname "$0")" && pwd)/unlink-opencode.sh"
+
+echo ""
+echo "🤝 Shared agent resources (~/.agents):"
+if [[ -d "$HOME/.agents/skills" ]]; then
+    for link in "$HOME/.agents/skills"/*; do
+        [[ -L "$link" ]] || continue
+        if [[ "$(readlink "$link")" == "$HOME/Develop/dot-files/.ai/skills/"* ]]; then
+            remove_symlink "$link" "Shared skill $(basename "$link")"
+        fi
+    done
+fi
+remove_symlink "$HOME/.agents/roles" "Role briefs for CLI workers"
 
 echo ""
 echo "🔌 MCP configurations:"

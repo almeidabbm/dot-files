@@ -3,9 +3,10 @@
 # Read-only health check for dot-files.
 # Verifies that every symlink this repo is supposed to create exists and
 # resolves. Makes NO changes.
-# Exits non-zero if any check fails, so it is safe to use in scripts/CI.
+# Runs every check and exits non-zero at the end if any failed.
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
+shopt -s nullglob
 SHARED=".ai/shared-instructions.md"
 
 pass=0
@@ -75,10 +76,10 @@ done
 echo ""
 echo "👥 Worker agents (.ai/agents/roles rendered per host)"
 if "$DOTFILES_DIR/.ai/agents/render.sh" --check >/dev/null 2>&1; then
-    echo "  ✅ Rendered agents match roles/"
+    echo "  ✅ Rendered agents match roles/ and parse"
     ((pass++))
 else
-    echo "  ❌ Rendered agents are stale; run .ai/agents/render.sh"
+    echo "  ❌ Rendered agents are stale or invalid; run .ai/agents/render.sh"
     ((fail++))
 fi
 for role in "$DOTFILES_DIR"/.ai/agents/roles/*.md; do

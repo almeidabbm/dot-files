@@ -18,11 +18,13 @@ Each piece installs on its own if you'd rather not touch your shell or editor:
 | Install | Remove | What it touches |
 | --- | --- | --- |
 | `link.sh` | `unlink.sh` | Everything below |
-| `link-claude.sh` | `unlink-claude.sh` | `~/.claude/` |
-| `link-codex.sh` | `unlink-codex.sh` | `~/.codex/` |
-| `link-opencode.sh` | `unlink-opencode.sh` | `~/.config/opencode/` |
+| `link-claude.sh` | `unlink-claude.sh` | `~/.claude/`, plus the shared `~/.agents/` links |
+| `link-codex.sh` | `unlink-codex.sh` | `~/.codex/`, plus the shared `~/.agents/` links |
+| `link-opencode.sh` | `unlink-opencode.sh` | `~/.config/opencode/`, plus the shared `~/.agents/` links |
 
-Check an install with `./doctor.sh` (read-only, exits non-zero on the first dangling link) or `./list-symlink.sh`.
+Every host script installs the shared `~/.agents/` links (skills for Codex and OpenCode, role briefs for CLI workers) because any host may spawn a worker on either provider. Only `unlink.sh` removes them, so uninstalling one host never breaks another.
+
+Check an install with `./doctor.sh` (read-only, runs every check and exits non-zero if any failed) or `./list-symlink.sh`. Run `./tests/run.sh` after changing the link scripts or the agent renderer.
 
 ---
 
@@ -36,14 +38,14 @@ Operating rules for agents live under [`.ai/`](.ai/) and are projected into each
 | On-demand skills | [`skills/`](.ai/skills/) | `~/.claude/skills/` | `~/.agents/skills/` | `~/.agents/skills/` |
 | Worker agents | [`agents/roles/`](.ai/agents/roles/) | `~/.claude/agents/` | `~/.codex/agents/` | `~/.config/opencode/agents/` |
 
-The always-loaded file holds task, verification, and style rules plus one-line hooks into the skills. Each host lists skill descriptions every turn and loads the body on demand, which is far more reliable than a "read this path" pointer:
+The always-loaded file holds task, verification, and style rules plus one-line hooks into the skills. Each host lists skill descriptions every turn and loads the body on demand, instead of relying on a "read this path" pointer the agent has to act on itself:
 
 | Skill | Fires when |
 | --- | --- |
 | [`git-workflow`](.ai/skills/git-workflow/SKILL.md) | First branch, commit, stack, worktree, or PR operation in a task; `gh stack` or a rebase fails |
 | [`delegation`](.ai/skills/delegation/SKILL.md) | Delegating a bounded investigation, parallel implementation, or independent review; choosing a worker's provider, model, or effort |
 
-Three worker roles (`investigator`, `implementer`, `reviewer`) are written once in [`agents/roles/`](.ai/agents/roles/) and rendered into each host's agent format by [`agents/render.sh`](.ai/agents/render.sh); run it after editing a role, and `doctor.sh` fails when the rendered files are stale. A role fixes instructions and write access only. The main agent chooses provider, model, and effort per spawn, and can run a worker on either provider from any host: native subagents for the host's own provider, `codex exec` or `claude -p` for the other one. The role text is also linked at `~/.agents/roles/` so a CLI brief can prepend it.
+Three worker roles (`investigator`, `implementer`, `reviewer`) are written once in [`agents/roles/`](.ai/agents/roles/) and rendered into each host's agent format by [`agents/render.sh`](.ai/agents/render.sh); run it after editing a role, and `doctor.sh` fails when the rendered files are stale. A role fixes instructions and write access only. The main agent chooses provider, model, and effort per spawn where the route allows it, and can run a worker on either provider from any host: native subagents for the host's own provider, `codex exec` or `claude -p` for the other one. The role text is also linked at `~/.agents/roles/` so a `codex exec` brief can prepend it; the `claude -p` route reads the Claude agent file, so `link-claude.sh` must have run on the machine.
 
 Start your preferred agent normally. The workflow does not depend on the main agent's model or require a custom launcher. Paths assume `~/Develop/dot-files`, matching the install scripts. This layer instructs agents; it does not enforce against them. Branch policy belongs to each repository.
 
@@ -55,7 +57,7 @@ At the start of each task, read and follow ~/Develop/dot-files/.ai/shared-instru
 
 Cursor's global User Rules apply to Agent chat, not Tab or inline editing ([Cursor rules](https://cursor.com/docs/rules)). The `link-*.sh` scripts install rules for the three tools in the table; they do not configure Cursor or Grok.
 
-The [research and audit notes](docs/ai-workflow-research.md) record the evidence, including the transcript measurement that motivated moving procedures into skills. To evaluate a rule change, use a small direct edit, an independent investigation, and a scoped implementation/review task, and check whether the skill actually loaded and which worker, provider, and model were chosen.
+The [research and audit notes](docs/ai-workflow-research.md) record the evidence, including a one-day transcript baseline taken before moving procedures into skills. To evaluate a rule change, use a small direct edit, an independent investigation, and a scoped implementation/review task, and check whether the skill actually loaded and which worker, provider, and model were chosen.
 
 ---
 

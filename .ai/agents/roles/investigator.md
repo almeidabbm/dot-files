@@ -1,5 +1,4 @@
 ---
-name: investigator
 description: Read-only investigator that traces code paths, gathers evidence, and answers one bounded question with file references. Use proactively when answering needs a sweep of many files or sources and only the conclusion belongs in the main conversation.
 writes: false
 ---

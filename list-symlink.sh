@@ -3,6 +3,7 @@
 # Lists all active symlinks managed by this repo.
 
 DOTFILES_DIR="$HOME/Develop/dot-files"
+shopt -s nullglob
 
 targets=(
     "$HOME/.config/nvim/init.lua|Neovim init"

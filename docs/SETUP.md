@@ -16,13 +16,15 @@ Three parts, each usable on its own:
 git clone git@github.com:almeidabbm/dot-files.git ~/Develop/dot-files
 cd ~/Develop/dot-files
 ./link.sh          # symlinks everything into $HOME
-./doctor.sh        # read-only check; non-zero on the first dangling link
+./doctor.sh        # read-only check; non-zero if any link or render check fails
 ```
 
 `link.sh` projects [`.ai/shared-instructions.md`](../.ai/shared-instructions.md) into each
 agent tool's native path (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
-`~/.config/opencode/AGENTS.md`) so Claude Code, Codex, and OpenCode share the same
-operating rules.
+`~/.config/opencode/AGENTS.md`), the skills in `.ai/skills/` into `~/.claude/skills/` and
+`~/.agents/skills/`, and the worker agents rendered from `.ai/agents/roles/` into each
+host's agents directory, so Claude Code, Codex, and OpenCode share the same operating
+rules, skills, and worker roles.
 
 Dependencies worth having before you start:
 

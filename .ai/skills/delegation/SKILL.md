@@ -39,7 +39,7 @@ Match the model to the assignment, not to the role:
 
 - Keep work local when it is small, depends on continuous shared reasoning, or cannot be separated without extensive coordination. A fixed spec, implementation, review pipeline is unnecessary.
 - Delegate independent investigation, a defined implementation, or a focused review.
-- Give a specification worker the problem and open questions; give an implementer the agreed behavior and acceptance criteria. Keep unresolved product decisions visible to the user.
+- When the assignment is to draft a specification, give an `investigator` the problem and open questions; give an `implementer` the agreed behavior and acceptance criteria. Keep unresolved product decisions visible to the user.
 
 ## Brief
 
@@ -73,7 +73,7 @@ cat ~/.agents/roles/<role>.md <brief-file> | codex exec - \
 
 The first JSONL event, `thread.started`, carries `thread_id`; the final message lands in the `-o` file. Resume with `codex exec resume <thread_id> - < <follow-up-file>`.
 
-Anthropic worker from any host (the role comes from the host-linked agent file):
+Anthropic worker from any host (the role comes from `~/.claude/agents/<role>.md`, installed by `link-claude.sh`, so that script must have run on this machine even when the host is Codex or OpenCode):
 
 ```bash
 cd <workdir> && claude -p --agent <role> --model <model> --effort <effort> \

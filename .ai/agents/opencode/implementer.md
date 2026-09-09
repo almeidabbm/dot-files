@@ -1,5 +1,5 @@
 ---
-description: Implements a fully specified change with tests inside an assigned scope and reports the checks it ran. Use when a bounded implementation can proceed independently of the main conversation, in parallel with other work, or in its own worktree.
+description: "Implements a fully specified change with tests inside an assigned scope and reports the checks it ran. Use when a bounded implementation can proceed independently of the main conversation, in parallel with other work, or in its own worktree."
 mode: subagent
 ---
 
