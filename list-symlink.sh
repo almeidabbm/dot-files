@@ -19,6 +19,18 @@ if [[ -f "$DOTFILES_DIR/.ai/shared-instructions.md" ]]; then
     targets+=("$HOME/.codex/AGENTS.md|Codex global rules")
     targets+=("$HOME/.config/opencode/AGENTS.md|OpenCode global rules")
 fi
+for skill in "$DOTFILES_DIR"/.ai/skills/*/; do
+    name="$(basename "$skill")"
+    targets+=("$HOME/.claude/skills/$name|Claude skill $name")
+    targets+=("$HOME/.agents/skills/$name|Shared skill $name")
+done
+for role in "$DOTFILES_DIR"/.ai/agents/roles/*.md; do
+    name="$(basename "$role" .md)"
+    targets+=("$HOME/.claude/agents/$name.md|Claude agent $name")
+    targets+=("$HOME/.codex/agents/$name.toml|Codex agent $name")
+    targets+=("$HOME/.config/opencode/agents/$name.md|OpenCode agent $name")
+done
+targets+=("$HOME/.agents/roles|Role briefs for CLI workers")
 
 echo ""
 echo "🔗 Dot-files symlinks"

@@ -19,7 +19,7 @@ Researched 2026-09-08. Scope: the shared `.ai` workflow across coding-agent host
 
 ## Audit before changes (commit `2bdd178`)
 
-The original shared file already captured useful personal conventions: repository-owned branch policy, Conventional Commits, focused testing, bug regression tests, and ticket/PR handoffs. Its symlink-based single source of truth avoided maintaining separate Claude, Codex, and OpenCode copies. These conventions are retained in [the shared instructions](../.ai/shared-instructions.md), [Git workflow](../.ai/git-workflow.md), and [README](../README.md).
+The original shared file already captured useful personal conventions: repository-owned branch policy, Conventional Commits, focused testing, bug regression tests, and ticket/PR handoffs. Its symlink-based single source of truth avoided maintaining separate Claude, Codex, and OpenCode copies. These conventions are retained in [the shared instructions](../.ai/shared-instructions.md), the [Git workflow skill](../.ai/skills/git-workflow/SKILL.md), and [README](../README.md).
 
 The main opportunity is information placement. Detailed stack commands and worktree procedures apply only to some tasks but were always loaded. Delegation lacked a definition of a useful work boundary, a required context brief, ownership rules, and evidence-based completion. Model names or guessed strengths would introduce another maintenance burden if treated as permanent workflow facts.
 
@@ -34,6 +34,21 @@ These choices apply the evidence to this user's workflow; they are not vendor re
 - Parallelize independent read-only work freely within host limits. For editing, assign disjoint ownership or separate worktrees; coordinate shared files, Git operations, tests using shared state, and final integration centrally. A fresh context does not imply a separate filesystem.
 - Select a model and execution route separately. Resolve actual supported identifiers through the current tool, preserve permission boundaries, and report substitutions when visible. Use task complexity, tools, observed results, and user usage preferences instead of fixed provider stereotypes. Preserve explicit user selections.
 - Verify the changed behavior and acceptance criteria, including the combined result after integration. Inspect partial work before retrying; change the brief, model, or approach when failures repeat.
+
+## Measured after two weeks (2026-09-09)
+
+The 2026-09-08 layout kept procedures in files reached by "read `~/Develop/dot-files/.ai/<file>` before X" pointers. Claude Code transcripts from 2026-08-25 to 2026-09-09 (61 top-level sessions) show how often those pointers fired versus native mechanisms:
+
+| Signal | Sessions |
+| --- | --- |
+| Actually read `delegation.md` | 2 |
+| Actually read `models.md` | 1 |
+| Actually read `git-workflow.md` | 3 |
+| Invoked a skill | 30 |
+| Used the Agent tool | 23 (47 calls; 6 passed a model, the rest defaulted to `general-purpose` on the parent's model) |
+| Launched an external worker (`codex exec`, `claude -p`, `cursor-agent`) | 0 |
+
+Path pointers fired in roughly 5% of sessions; skill descriptions fired in half. No host had a custom agent defined, so the roles described in `delegation.md` were not selectable, and model choice defaulted to inheriting the parent. The 2026-09-09 change moves the Git and delegation procedures into skills, defines the three roles as host-native agents rendered from one source, and makes provider, model, and effort an explicit per-spawn decision with the exact cross-provider CLI commands in the skill. The counts above are the baseline to compare against.
 
 ## Validation and maintenance
 

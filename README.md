@@ -28,23 +28,24 @@ Check an install with `./doctor.sh` (read-only, exits non-zero on the first dang
 
 ## Shared AI rules
 
-Operating rules for agents live in [`.ai/shared-instructions.md`](.ai/shared-instructions.md) and are projected into each tool's native path by the `link-*.sh` scripts:
+Operating rules for agents live under [`.ai/`](.ai/) and are projected into each tool's native path by the `link-*.sh` scripts. One source, three hosts:
 
-| Tool | Symlink |
+| What | Source | Claude Code | Codex | OpenCode |
+| --- | --- | --- | --- | --- |
+| Always-loaded rules | [`shared-instructions.md`](.ai/shared-instructions.md) | `~/.claude/CLAUDE.md` | `~/.codex/AGENTS.md` | `~/.config/opencode/AGENTS.md` |
+| On-demand skills | [`skills/`](.ai/skills/) | `~/.claude/skills/` | `~/.agents/skills/` | `~/.agents/skills/` |
+| Worker agents | [`agents/roles/`](.ai/agents/roles/) | `~/.claude/agents/` | `~/.codex/agents/` | `~/.config/opencode/agents/` |
+
+The always-loaded file holds task, verification, and style rules plus one-line hooks into the skills. Each host lists skill descriptions every turn and loads the body on demand, which is far more reliable than a "read this path" pointer:
+
+| Skill | Fires when |
 | --- | --- |
-| Claude Code | `~/.claude/CLAUDE.md` |
-| Codex | `~/.codex/AGENTS.md` |
-| OpenCode | `~/.config/opencode/AGENTS.md` |
+| [`git-workflow`](.ai/skills/git-workflow/SKILL.md) | First branch, commit, stack, worktree, or PR operation in a task; `gh stack` or a rebase fails |
+| [`delegation`](.ai/skills/delegation/SKILL.md) | Delegating a bounded investigation, parallel implementation, or independent review; choosing a worker's provider, model, or effort |
 
-The entry file contains task, delegation, verification, and style rules. It loads detailed guidance only when relevant:
+Three worker roles (`investigator`, `implementer`, `reviewer`) are written once in [`agents/roles/`](.ai/agents/roles/) and rendered into each host's agent format by [`agents/render.sh`](.ai/agents/render.sh); run it after editing a role, and `doctor.sh` fails when the rendered files are stale. A role fixes instructions and write access only. The main agent chooses provider, model, and effort per spawn, and can run a worker on either provider from any host: native subagents for the host's own provider, `codex exec` or `claude -p` for the other one. The role text is also linked at `~/.agents/roles/` so a CLI brief can prepend it.
 
-| File | Read when |
-| --- | --- |
-| [Git workflow](.ai/git-workflow.md) | Starting implementation or managing branches, stacks, worktrees, commits, or PRs |
-| [Delegation](.ai/delegation.md) | Assigning bounded work to another agent |
-| [Worker models](.ai/models.md) | Choosing a worker model and execution tool |
-
-Start your preferred agent normally. The workflow does not depend on the main agent's model or require a custom launcher. Supporting paths use `~/Develop/dot-files/.ai/`, matching the install scripts; update them if you change the installation location. This layer instructs agents; it does not enforce against them. Branch policy belongs to each repository.
+Start your preferred agent normally. The workflow does not depend on the main agent's model or require a custom launcher. Paths assume `~/Develop/dot-files`, matching the install scripts. This layer instructs agents; it does not enforce against them. Branch policy belongs to each repository.
 
 For Cursor Agent chat, add this pointer to **User Rules** in Cursor's rules settings:
 
@@ -52,9 +53,9 @@ For Cursor Agent chat, add this pointer to **User Rules** in Cursor's rules sett
 At the start of each task, read and follow ~/Develop/dot-files/.ai/shared-instructions.md.
 ```
 
-Cursor's global User Rules apply to Agent chat, not Tab or inline editing ([Cursor rules](https://cursor.com/docs/rules)). The `link-*.sh` scripts currently install rules for the three tools in the table; they do not configure Cursor or Grok. For another local agent, add the same pointer to its supported instruction mechanism and verify that it can read the file. External workers also receive explicit instruction paths in their brief.
+Cursor's global User Rules apply to Agent chat, not Tab or inline editing ([Cursor rules](https://cursor.com/docs/rules)). The `link-*.sh` scripts install rules for the three tools in the table; they do not configure Cursor or Grok.
 
-The [research and audit notes](docs/ai-workflow-research.md) explain the evidence and tradeoffs. To evaluate a rule change, use a small direct edit, an independent investigation, and a scoped implementation/review task. Check instruction loading, delegation choices, file ownership, and actual verification; compare rework and usage with the previous workflow. Static link checks alone do not establish better agent behavior.
+The [research and audit notes](docs/ai-workflow-research.md) record the evidence, including the transcript measurement that motivated moving procedures into skills. To evaluate a rule change, use a small direct edit, an independent investigation, and a scoped implementation/review task, and check whether the skill actually loaded and which worker, provider, and model were chosen.
 
 ---
 

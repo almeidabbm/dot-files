@@ -19,16 +19,17 @@ create_symlink() {
     fi
 }
 
-remove_repo_skill_links() {
-    local skills_dir="$1"
+# Drop links into this repo's .ai/ whose source no longer exists (renamed or removed).
+prune_dangling_links() {
+    local dir="$1"
     local label="$2"
-    [[ -d "$skills_dir" ]] || return 0
+    [[ -d "$dir" ]] || return 0
     local link
-    for link in "$skills_dir"/*; do
+    for link in "$dir"/*; do
         [[ -L "$link" ]] || continue
-        if [[ "$(readlink "$link")" == *"$DOTFILES_DIR/.ai/skills"* ]]; then
+        if [[ "$(readlink "$link")" == "$DOTFILES_DIR/.ai/"* ]] && [[ ! -e "$link" ]]; then
             rm "$link"
-            echo "  🗑️  Removed stale $label skill: $(basename "$link")"
+            echo "  🗑️  Removed stale $label: $(basename "$link")"
         fi
     done
 }
@@ -44,7 +45,23 @@ remove_agent_memory_cli() {
 echo "🧠 Setting up Codex configuration..."
 remove_agent_memory_cli
 create_symlink "$DOTFILES_DIR/.ai/shared-instructions.md" "$HOME/.codex/AGENTS.md" "Codex global rules"
-remove_repo_skill_links "$HOME/.codex/skills" "Codex"
+
+echo ""
+echo "🧩 Skills (~/.agents/skills, read by Codex and OpenCode)"
+prune_dangling_links "$HOME/.agents/skills" "shared skill"
+prune_dangling_links "$HOME/.codex/skills" "legacy Codex skill"
+for skill in "$DOTFILES_DIR"/.ai/skills/*/; do
+    name="$(basename "$skill")"
+    create_symlink "${skill%/}" "$HOME/.agents/skills/$name" "Skill $name"
+done
+
+echo ""
+echo "👥 Worker agents (~/.codex/agents)"
+prune_dangling_links "$HOME/.codex/agents" "Codex agent"
+for agent in "$DOTFILES_DIR"/.ai/agents/codex/*.toml; do
+    create_symlink "$agent" "$HOME/.codex/agents/$(basename "$agent")" "Agent $(basename "$agent" .toml)"
+done
+create_symlink "$DOTFILES_DIR/.ai/agents/roles" "$HOME/.agents/roles" "Role briefs for CLI workers"
 
 echo ""
 echo "  ℹ️  Restart Codex if it is already open so it reloads AGENTS.md"

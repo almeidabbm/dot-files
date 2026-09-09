@@ -1,6 +1,11 @@
+---
+name: git-workflow
+description: Personal Git conventions for trunk sync, gh stack stacked PRs and their fallbacks, worktrees under .worktrees/, commits, and PR submission. Load before the first branch, commit, stack, worktree, or PR operation in a task, and when gh stack or a rebase fails.
+---
+
 # Git Workflow
 
-Read before branch, stack, worktree, commit, or PR operations. Repository branch policy takes precedence over these personal defaults. Check installed command help rather than assuming flags are unchanged.
+Repository branch policy takes precedence over these personal defaults. Check installed command help rather than assuming flags are unchanged.
 
 ## Branches And Sync
 

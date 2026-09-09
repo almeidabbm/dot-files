@@ -24,18 +24,26 @@ remove_symlink() {
     fi
 }
 
-echo "🤖 Cleaning up Claude Code symlinks..."
-remove_symlink "$HOME/.claude/CLAUDE.md" "Claude global rules"
-
-# Remove any leftover skill links that pointed into this repo's .ai/skills/
-if [[ -d "$HOME/.claude/skills" ]]; then
-    for link in "$HOME/.claude/skills"/*; do
+# Remove every link in a directory that points into this repo's .ai/<subdir>/.
+remove_repo_links() {
+    local dir="$1"
+    local subdir="$2"
+    local label="$3"
+    [[ -d "$dir" ]] || return 0
+    local link
+    for link in "$dir"/*; do
         [[ -L "$link" ]] || continue
-        if [[ "$(readlink "$link")" == *"$DOTFILES_DIR/.ai/skills"* ]]; then
-            remove_symlink "$link" "Claude skill: $(basename "$link")"
+        if [[ "$(readlink "$link")" == "$DOTFILES_DIR/.ai/$subdir"* ]]; then
+            remove_symlink "$link" "$label: $(basename "$link")"
         fi
     done
-fi
+}
+
+echo "🤖 Cleaning up Claude Code symlinks..."
+remove_symlink "$HOME/.claude/CLAUDE.md" "Claude global rules"
+remove_repo_links "$HOME/.claude/skills" "skills" "Claude skill"
+remove_repo_links "$HOME/.claude/agents" "agents" "Claude agent"
+remove_symlink "$HOME/.agents/roles" "Role briefs for CLI workers"
 
 echo ""
 echo "🎉 Claude Code cleanup complete!"

@@ -65,6 +65,31 @@ check_link "$HOME/.config/opencode/AGENTS.md" "$SHARED" "OpenCode global rules"
 check_absent "$HOME/.local/bin/agent-memory" "Legacy agent-memory CLI absent"
 
 echo ""
+echo "🧩 Skills (.ai/skills -> Claude, and ~/.agents/skills for Codex + OpenCode)"
+for skill in "$DOTFILES_DIR"/.ai/skills/*/; do
+    name="$(basename "$skill")"
+    check_link "$HOME/.claude/skills/$name" "/dot-files/.ai/skills/$name" "Claude   skill $name"
+    check_link "$HOME/.agents/skills/$name" "/dot-files/.ai/skills/$name" "Shared   skill $name"
+done
+
+echo ""
+echo "👥 Worker agents (.ai/agents/roles rendered per host)"
+if "$DOTFILES_DIR/.ai/agents/render.sh" --check >/dev/null 2>&1; then
+    echo "  ✅ Rendered agents match roles/"
+    ((pass++))
+else
+    echo "  ❌ Rendered agents are stale; run .ai/agents/render.sh"
+    ((fail++))
+fi
+for role in "$DOTFILES_DIR"/.ai/agents/roles/*.md; do
+    name="$(basename "$role" .md)"
+    check_link "$HOME/.claude/agents/$name.md" "/dot-files/.ai/agents/claude/$name.md" "Claude   agent $name"
+    check_link "$HOME/.codex/agents/$name.toml" "/dot-files/.ai/agents/codex/$name.toml" "Codex    agent $name"
+    check_link "$HOME/.config/opencode/agents/$name.md" "/dot-files/.ai/agents/opencode/$name.md" "OpenCode agent $name"
+done
+check_link "$HOME/.agents/roles" "/dot-files/.ai/agents/roles" "Role briefs for CLI workers"
+
+echo ""
 echo "────────────────────────────────────────"
 echo "  $pass passed, $fail failed"
 if [[ "$fail" -gt 0 ]]; then

@@ -135,10 +135,10 @@ gh extension list | grep -q gh-stack && echo "installed"
 gh stack --version
 ```
 
-The shared workflow rules in `.ai/shared-instructions.md` assume this extension is
-present. They cover commits (Conventional Commits, no `Co-Authored-By` trailers),
-worktrees under `.worktrees/`, and stacking — but deliberately state **no branch
-policy**. Each repository owns that, through its own `AGENTS.md`/`CLAUDE.md`, branch
+The shared workflow rules in `.ai/shared-instructions.md` and the `git-workflow` skill
+in `.ai/skills/git-workflow/` assume this extension is present. They cover commits
+(Conventional Commits, no `Co-Authored-By` trailers), worktrees under `.worktrees/`,
+and stacking — but deliberately state **no branch policy**. Each repository owns that, through its own `AGENTS.md`/`CLAUDE.md`, branch
 protection, or CI. Follow what the repository states rather than assuming a rule it has
 not written down.
 

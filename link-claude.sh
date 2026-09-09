@@ -19,16 +19,17 @@ create_symlink() {
     fi
 }
 
-remove_repo_skill_links() {
-    local skills_dir="$1"
+# Drop links into this repo's .ai/ whose source no longer exists (renamed or removed).
+prune_dangling_links() {
+    local dir="$1"
     local label="$2"
-    [[ -d "$skills_dir" ]] || return 0
+    [[ -d "$dir" ]] || return 0
     local link
-    for link in "$skills_dir"/*; do
+    for link in "$dir"/*; do
         [[ -L "$link" ]] || continue
-        if [[ "$(readlink "$link")" == *"$DOTFILES_DIR/.ai/skills"* ]]; then
+        if [[ "$(readlink "$link")" == "$DOTFILES_DIR/.ai/"* ]] && [[ ! -e "$link" ]]; then
             rm "$link"
-            echo "  🗑️  Removed stale $label skill: $(basename "$link")"
+            echo "  🗑️  Removed stale $label: $(basename "$link")"
         fi
     done
 }
@@ -44,7 +45,22 @@ remove_agent_memory_cli() {
 echo "🤖 Setting up Claude Code configuration..."
 remove_agent_memory_cli
 create_symlink "$DOTFILES_DIR/.ai/shared-instructions.md" "$HOME/.claude/CLAUDE.md" "Claude global rules"
-remove_repo_skill_links "$HOME/.claude/skills" "Claude"
+
+echo ""
+echo "🧩 Skills (~/.claude/skills)"
+prune_dangling_links "$HOME/.claude/skills" "Claude skill"
+for skill in "$DOTFILES_DIR"/.ai/skills/*/; do
+    name="$(basename "$skill")"
+    create_symlink "${skill%/}" "$HOME/.claude/skills/$name" "Skill $name"
+done
+
+echo ""
+echo "👥 Worker agents (~/.claude/agents)"
+prune_dangling_links "$HOME/.claude/agents" "Claude agent"
+for agent in "$DOTFILES_DIR"/.ai/agents/claude/*.md; do
+    create_symlink "$agent" "$HOME/.claude/agents/$(basename "$agent")" "Agent $(basename "$agent" .md)"
+done
+create_symlink "$DOTFILES_DIR/.ai/agents/roles" "$HOME/.agents/roles" "Role briefs for CLI workers"
 
 echo ""
 echo "🎉 Claude Code setup complete!"

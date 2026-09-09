@@ -15,7 +15,7 @@ remove_symlink() {
             echo "  🗑️  Removing: $target -> $link_target"
             rm "$target"
         else
-            echo "  ⚠️  Skipping: $target (points to $link_target, not opencode)"
+            echo "  ⚠️  Skipping: $target (points to $link_target, not dot-files)"
         fi
     elif [[ -e "$target" ]]; then
         echo "  ⚠️  Skipping: $target (exists but is not a symlink)"
@@ -24,28 +24,27 @@ remove_symlink() {
     fi
 }
 
-echo "🗑️  Removing OpenCode configuration..."
-
-agents_link="$HOME/.config/opencode/AGENTS.md"
-if [[ -L "$agents_link" ]] && [[ "$(readlink "$agents_link")" == *"/.ai/shared-instructions.md" ]]; then
-    echo "  🗑️  Removing: $agents_link -> $(readlink "$agents_link")"
-    rm "$agents_link"
-elif [[ -e "$agents_link" ]]; then
-    echo "  ⚠️  Skipping: $agents_link (exists but is not our symlink)"
-else
-    echo "  ✅ Already clean: $agents_link"
-fi
-
-echo ""
-echo "👤 Removing personal skills from dot-files..."
-if [[ -d "$HOME/.config/opencode/skills" ]]; then
-    for link in "$HOME/.config/opencode/skills"/*; do
+# Remove every link in a directory that points into this repo's .ai/<subdir>/.
+remove_repo_links() {
+    local dir="$1"
+    local subdir="$2"
+    local label="$3"
+    [[ -d "$dir" ]] || return 0
+    local link
+    for link in "$dir"/*; do
         [[ -L "$link" ]] || continue
-        if [[ "$(readlink "$link")" == *"$DOTFILES_DIR/.ai/skills"* ]]; then
-            remove_symlink "$link" "Skill: $(basename "$link")"
+        if [[ "$(readlink "$link")" == "$DOTFILES_DIR/.ai/$subdir"* ]]; then
+            remove_symlink "$link" "$label: $(basename "$link")"
         fi
     done
-fi
+}
+
+echo "🗑️  Removing OpenCode configuration..."
+remove_symlink "$HOME/.config/opencode/AGENTS.md" "OpenCode global rules"
+remove_repo_links "$HOME/.agents/skills" "skills" "Shared skill"
+remove_repo_links "$HOME/.config/opencode/skills" "skills" "Legacy OpenCode skill"
+remove_repo_links "$HOME/.config/opencode/agents" "agents" "OpenCode agent"
+remove_symlink "$HOME/.agents/roles" "Role briefs for CLI workers"
 
 echo ""
 echo "🎉 OpenCode configuration removed!"

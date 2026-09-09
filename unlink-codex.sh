@@ -24,17 +24,27 @@ remove_symlink() {
     fi
 }
 
-echo "🧹 Cleaning up Codex symlinks..."
-remove_symlink "$HOME/.codex/AGENTS.md" "Codex global rules"
-
-if [[ -d "$HOME/.codex/skills" ]]; then
-    for link in "$HOME/.codex/skills"/*; do
+# Remove every link in a directory that points into this repo's .ai/<subdir>/.
+remove_repo_links() {
+    local dir="$1"
+    local subdir="$2"
+    local label="$3"
+    [[ -d "$dir" ]] || return 0
+    local link
+    for link in "$dir"/*; do
         [[ -L "$link" ]] || continue
-        if [[ "$(readlink "$link")" == *"$DOTFILES_DIR/.ai/skills"* ]]; then
-            remove_symlink "$link" "Codex skill: $(basename "$link")"
+        if [[ "$(readlink "$link")" == "$DOTFILES_DIR/.ai/$subdir"* ]]; then
+            remove_symlink "$link" "$label: $(basename "$link")"
         fi
     done
-fi
+}
+
+echo "🧹 Cleaning up Codex symlinks..."
+remove_symlink "$HOME/.codex/AGENTS.md" "Codex global rules"
+remove_repo_links "$HOME/.agents/skills" "skills" "Shared skill"
+remove_repo_links "$HOME/.codex/skills" "skills" "Legacy Codex skill"
+remove_repo_links "$HOME/.codex/agents" "agents" "Codex agent"
+remove_symlink "$HOME/.agents/roles" "Role briefs for CLI workers"
 
 echo ""
 echo "🎉 Codex cleanup complete!"
