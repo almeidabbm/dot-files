@@ -19,26 +19,16 @@ Three roles exist everywhere. Source: `.ai/agents/roles/` in dot-files, rendered
 
 ## Choose Provider, Model, And Effort
 
-Every spawn states a role, a provider, a model, and an effort. The host you run in does not decide the worker's provider: Claude Code can run OpenAI workers and Codex can run Anthropic workers through the CLIs below. Inheriting your own model is the most expensive outcome and must be a stated choice, never an omission. Name role, provider, model, effort, and reason in a progress update.
+Choose the role and provider for the assignment, using models and effort levels supported by the current host or CLI. Honor the user's explicit model, tool, quality, speed, and usage preferences. Select from current availability rather than a model list cached in this skill.
 
-Match the model to the assignment, not to the role:
-
-| Assignment shape | Anthropic | OpenAI |
-| --- | --- | --- |
-| Narrow, repeatable transformation; mechanical search | `claude-haiku-4-5-20251001` | `gpt-5.6-luna` |
-| Well-specified implementation or investigation | `sonnet` | `gpt-5.6-terra` |
-| Ambiguous reasoning, hard debugging, consequential review | `opus` | `gpt-5.6-sol` |
-| Most demanding assignments, or after a stronger attempt failed | `fable` | `gpt-6-astra` |
-
-- Effort levels: Anthropic `low`, `medium`, `high`, `xhigh`, `max`; OpenAI `low`, `medium`, `high`, `xhigh`, `ultra`. Names are not equivalent across providers. Start at the model's default; raise effort or step up one row when the first attempt fails or the assignment turns out harder than briefed; step down when a task proves mechanical.
-- Prefer the native route (same provider as the host) when both providers fit: it is cheaper to run and inherits the host's permissions. Cross the provider line when the other model fits better, when the user asks, or for an independent review by a different model. A different provider is optional, not proof of correctness.
-- Honor the user's explicit model, tool, quality, speed, and usage preferences. Keep overrides scoped to the invocation; the table above is the only default, and changing them is a reviewable edit.
-- Record the requested model and the actual model when the tool reports it. Aliases resolve differently per host and account: on 2026-09-09 `claude -p --model haiku` ran Sonnet 5 while the full Haiku id ran Haiku, so pass a full id when the choice matters and check `modelUsage` in the JSON result. The table is a routing hypothesis checked on 2026-09-09 against the [Claude Code model docs](https://code.claude.com/docs/en/model-config) and [Codex model docs](https://developers.openai.com/codex/models), not proof of access.
+- Match capability and cost to the task. Use the model's default effort unless the assignment warrants an override; increase effort or capability when evidence shows the first choice was insufficient.
+- Prefer the native route when both providers fit. Use another provider when it better fits the assignment or the user requests it. An independent review does not require a different provider.
+- Check the actual model when the tool reports it; aliases can resolve differently across hosts and accounts. Use an exact model ID when that distinction matters.
+- Briefly explain what is delegated and why. Mention model and effort only when requested or when the choice involves a meaningful tradeoff.
 
 ## Decide
 
-- Keep work local when it is small, depends on continuous shared reasoning, or cannot be separated without extensive coordination. A fixed spec, implementation, review pipeline is unnecessary.
-- Delegate independent investigation, a defined implementation, or a focused review.
+- Apply the shared instructions' delegation criteria before spawning. A bounded investigation or a review before a PR is a candidate, not an automatic delegation step.
 - When the assignment is to draft a specification, give an `investigator` the problem and open questions; give an `implementer` the agreed behavior and acceptance criteria. Keep unresolved product decisions visible to the user.
 
 ## Brief

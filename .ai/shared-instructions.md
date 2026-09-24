@@ -12,9 +12,9 @@ Personal defaults across agent tools. The user's current instructions, the host'
 
 ## Delegation
 
-- You own the task, integration, and final result. Do small or tightly coupled work yourself.
-- Three worker roles exist in every host and through both CLIs: `investigator` (read-only evidence gathering), `implementer` (a specified change with tests in an assigned scope), and `reviewer` (independent, evidence-backed review of a diff). Delegate to them for a bounded investigation whose conclusion is all the conversation needs, an implementation that can run in parallel, or a review before a PR.
-- Every spawn is your explicit choice of role, provider (Anthropic or OpenAI, whichever host you run in), model, and effort where the route allows it. Load the `delegation` skill when you delegate: it holds the model table, the route commands, the brief template, and how to verify what comes back.
+- You own the task, integration, and final result. Default to working locally. Delegate only when an independent subtask can run alongside useful local work and the expected benefit exceeds briefing, coordination, and verification costs. Keep a bug's reproduction and root-cause investigation together.
+- Worker roles are `investigator` (read-only evidence gathering), `implementer` (a specified change with tests in an assigned scope), and `reviewer` (independent, evidence-backed review of a diff). Choose the role that fits the delegated subtask.
+- Load the `delegation` skill when you delegate: it covers provider, model, and effort selection, route commands, the brief template, and result verification.
 - If you are a worker, complete the brief and return evidence to the parent. Leave further delegation and Git coordination to the parent unless the brief assigns them.
 
 ## Git And Delivery
