@@ -14,7 +14,7 @@ Personal defaults across agent tools. The user's current instructions, the host'
 
 - You own the task, integration, and final result. Default to working locally. Delegate only when an independent subtask can run alongside useful local work and the expected benefit exceeds briefing, coordination, and verification costs. Keep a bug's reproduction and root-cause investigation together.
 - Worker roles are `investigator` (read-only evidence gathering), `implementer` (a specified change with tests in an assigned scope), and `reviewer` (independent, evidence-backed review of a diff). Choose the role that fits the delegated subtask.
-- Load the `delegation` skill when you delegate: it covers provider, model, and effort selection, route commands, the brief template, and result verification.
+- Load the `delegate` skill when you delegate: it covers provider, model, and effort selection, route commands, the brief template, and result verification.
 - If you are a worker, complete the brief and return evidence to the parent. Leave further delegation and Git coordination to the parent unless the brief assigns them.
 
 ## Git And Delivery
@@ -39,4 +39,4 @@ Personal defaults across agent tools. The user's current instructions, the host'
 - Prefer open PRs and tracker status as the handoff surface across sessions. Keep the workflow independent of any particular tracker.
 - Follow existing project conventions and patterns; prefer functional patterns where appropriate.
 - Keep changes focused. Avoid unnecessary annotations, comments, or docstrings in code you did not change.
-- Improve shared instructions after observed, recurring friction. Keep always-relevant rules in this file, occasional procedures in the `git-workflow` and `delegation` skills, worker roles in the agent definitions, and repository-specific facts in that repository. Remove obsolete or conflicting guidance rather than accumulating exceptions.
+- Improve shared instructions after observed, recurring friction. Keep always-relevant rules in this file, occasional procedures in the `git-workflow` and `delegate` skills, worker roles in the agent definitions, and repository-specific facts in that repository. Remove obsolete or conflicting guidance rather than accumulating exceptions.

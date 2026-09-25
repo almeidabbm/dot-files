@@ -80,7 +80,7 @@ echo ""
 echo "🧪 link scripts"
 "$DOTS/link-claude.sh" >/dev/null && "$DOTS/link-codex.sh" >/dev/null && "$DOTS/link-opencode.sh" >/dev/null
 check "claude: rules, skills, agents linked" '[[ -L "$HOME/.claude/CLAUDE.md" && -e "$HOME/.claude/skills/git-workflow/SKILL.md" && -e "$HOME/.claude/agents/reviewer.md" ]]'
-check "codex: agents and shared skills linked" '[[ -e "$HOME/.codex/agents/reviewer.toml" && -e "$HOME/.agents/skills/delegation/SKILL.md" && -e "$HOME/.agents/roles/reviewer.md" ]]'
+check "codex: agents and shared skills linked" '[[ -e "$HOME/.codex/agents/reviewer.toml" && -e "$HOME/.agents/skills/delegate/SKILL.md" && -e "$HOME/.agents/roles/reviewer.md" ]]'
 check "opencode: agents linked" '[[ -e "$HOME/.config/opencode/agents/reviewer.md" ]]'
 
 mkdir -p "$HOME/.codex/skills"
@@ -106,12 +106,12 @@ mkdir -p "$DOTS/.ai/skills-backup/keep"
 ln -s "$DOTS/.ai/skills-backup/keep" "$HOME/.agents/skills/keep"
 "$DOTS/unlink-codex.sh" >/dev/null
 check "unlink-codex removes its own agents" '[[ ! -L "$HOME/.codex/agents/reviewer.toml" && ! -L "$HOME/.codex/AGENTS.md" ]]'
-check "unlink-codex leaves shared ~/.agents skills and roles" '[[ -e "$HOME/.agents/skills/delegation/SKILL.md" && -e "$HOME/.agents/roles/reviewer.md" ]]'
+check "unlink-codex leaves shared ~/.agents skills and roles" '[[ -e "$HOME/.agents/skills/delegate/SKILL.md" && -e "$HOME/.agents/roles/reviewer.md" ]]'
 check "unlink-codex leaves a link into a sibling directory (.ai/skills-backup)" '[[ -L "$HOME/.agents/skills/keep" ]]'
 "$DOTS/unlink-claude.sh" >/dev/null
 check "unlink-claude leaves shared ~/.agents roles" '[[ -e "$HOME/.agents/roles/reviewer.md" ]]'
 "$DOTS/unlink.sh" >/dev/null 2>&1
-check "unlink.sh removes shared ~/.agents skills and roles" '[[ ! -L "$HOME/.agents/skills/delegation" && ! -L "$HOME/.agents/roles" ]]'
+check "unlink.sh removes shared ~/.agents skills and roles" '[[ ! -L "$HOME/.agents/skills/delegate" && ! -L "$HOME/.agents/roles" ]]'
 check "unlink.sh leaves the sibling-directory link alone" '[[ -L "$HOME/.agents/skills/keep" ]]'
 
 echo ""

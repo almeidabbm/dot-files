@@ -1,15 +1,15 @@
 ---
-name: delegation
-description: Spawn a worker agent (investigator, implementer, reviewer) on Anthropic or OpenAI from any host, choosing model and effort per assignment, with the brief template and result verification. Load when delegating a bounded investigation, a parallel implementation, or an independent review, and when the user names a worker model, provider, or effort.
+name: delegate
+description: Spawn a worker agent (investigator, implementer, reviewer) through the host's native subagents or another agent CLI, choosing provider, model, and effort per assignment, with the brief template and result verification. Load when delegating a bounded investigation, a parallel implementation, or an independent review, and when the user names a worker model, provider, or effort.
 ---
 
-# Delegation
+# Delegate
 
 Keep the main conversation on the user's goal and decisions. Workers return evidence, not their exploration logs.
 
 ## Workers
 
-Three roles exist everywhere. Source: `.ai/agents/roles/` in dot-files, rendered by `.ai/agents/render.sh` into each host's agents directory and linked to `~/.agents/roles/<role>.md` for CLI briefs. A role carries instructions and write access only; provider, model, and effort are your decision on every spawn.
+Three roles are installed as each host's native agents, and their plain instructions live at `~/.agents/roles/<role>.md` for CLI briefs. A role carries instructions and write access only; provider, model, and effort are your decision on every spawn.
 
 | Role | Assignment | Writes |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ Choose the role and provider for the assignment, using models and effort levels 
 
 ## Decide
 
-- Apply the shared instructions' delegation criteria before spawning. A bounded investigation or a review before a PR is a candidate, not an automatic delegation step.
+- Delegate only when the subtask is independent and its benefit exceeds the cost of briefing, coordinating, and verifying it. A bounded investigation or a review before a PR is a candidate, not an automatic delegation step.
 - When the assignment is to draft a specification, give an `investigator` the problem and open questions; give an `implementer` the agreed behavior and acceptance criteria. Keep unresolved product decisions visible to the user.
 
 ## Brief
@@ -53,7 +53,7 @@ Workers return to the parent without further delegation unless assigned it. Ask 
 | Codex | Anthropic | `claude -p` below |
 | OpenCode | Anthropic or OpenAI | Subagents inherit the primary agent's model with no per-spawn choice. Use the CLIs below for any explicit model or effort. |
 
-OpenAI worker from any host (role instructions prepended from the linked role file):
+`codex exec` route, usable from any host (role instructions prepended from `~/.agents/roles/<role>.md`):
 
 ```bash
 cat ~/.agents/roles/<role>.md <brief-file> | codex exec - \
@@ -63,7 +63,7 @@ cat ~/.agents/roles/<role>.md <brief-file> | codex exec - \
 
 The first JSONL event, `thread.started`, carries `thread_id`; the final message lands in the `-o` file. Resume with `codex exec resume <thread_id> - < <follow-up-file>`.
 
-Anthropic worker from any host (the role comes from `~/.claude/agents/<role>.md`, installed by `link-claude.sh`, so that script must have run on this machine even when the host is Codex or OpenCode):
+`claude -p` route, usable from any host (the role comes from `~/.claude/agents/<role>.md`, which must exist even when the host is not Claude Code):
 
 ```bash
 cd <workdir> && claude -p --agent <role> --model <model> --effort <effort> \
@@ -74,7 +74,7 @@ The JSON result carries `session_id`; resume with `claude -p --resume <session_i
 
 - Keep the worker inside the parent's authorized scope. A denied action stays denied across agents, providers, and tools; use the host's approval mechanism instead of a bypass flag.
 - Other installed agent CLIs (`cursor-agent -p`, `grok -p`) are eligible after reading their help for model selection, working directory, output format, and permissions. They are not part of the default routes.
-- If a route or model is unavailable, distinguish model access from authentication, permissions, and task failure. Disclose the substitution or continue directly, and report remaining gaps without claiming completion.
+- If a role file a route needs is missing, report it instead of improvising the role. If a route or model is unavailable, distinguish model access from authentication, permissions, and task failure. Disclose the substitution or continue directly, and report remaining gaps without claiming completion.
 
 ## Coordinate And Verify
 
