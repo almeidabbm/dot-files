@@ -77,14 +77,9 @@ for skill in "$DOTFILES_DIR"/.ai/skills/*/; do
 done
 
 echo ""
-echo "👥 Worker agents (~/.config/opencode/agents)"
+echo "🧹 Retired worker agents (built-in subagents replace them)"
 prune_dangling_links "$HOME/.config/opencode/agents" "OpenCode agent"
-for agent in "$DOTFILES_DIR"/.ai/agents/opencode/*.md; do
-    create_symlink "$agent" "$HOME/.config/opencode/agents/$(basename "$agent")" "Agent $(basename "$agent" .md)"
-done
-echo ""
-echo "🤝 Shared (~/.agents, used by every host; removed only by unlink.sh)"
-create_symlink "$DOTFILES_DIR/.ai/agents/roles" "$HOME/.agents/roles" "Role briefs for CLI workers"
+prune_dangling_links "$HOME/.agents" "role briefs"
 
 echo ""
 echo "  ℹ️  Restart OpenCode to reload AGENTS.md"

@@ -72,14 +72,9 @@ for skill in "$DOTFILES_DIR"/.ai/skills/*/; do
 done
 
 echo ""
-echo "👥 Worker agents (~/.codex/agents)"
+echo "🧹 Retired worker agents (built-in subagents replace them)"
 prune_dangling_links "$HOME/.codex/agents" "Codex agent"
-for agent in "$DOTFILES_DIR"/.ai/agents/codex/*.toml; do
-    create_symlink "$agent" "$HOME/.codex/agents/$(basename "$agent")" "Agent $(basename "$agent" .toml)"
-done
-echo ""
-echo "🤝 Shared (~/.agents, used by every host; removed only by unlink.sh)"
-create_symlink "$DOTFILES_DIR/.ai/agents/roles" "$HOME/.agents/roles" "Role briefs for CLI workers"
+prune_dangling_links "$HOME/.agents" "role briefs"
 
 echo ""
 echo "  ℹ️  Restart Codex if it is already open so it reloads AGENTS.md"

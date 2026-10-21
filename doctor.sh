@@ -74,22 +74,6 @@ for skill in "$DOTFILES_DIR"/.ai/skills/*/; do
     check_link "$HOME/.agents/skills/$name" "/dot-files/.ai/skills/$name" "Shared   skill $name"
 done
 
-echo ""
-echo "👥 Worker agents (.ai/agents/roles rendered per host)"
-if "$DOTFILES_DIR/.ai/agents/render.sh" --check >/dev/null 2>&1; then
-    echo "  ✅ Rendered agents match roles/ and parse"
-    ((pass++))
-else
-    echo "  ❌ Rendered agents are stale or invalid; run .ai/agents/render.sh"
-    ((fail++))
-fi
-for role in "$DOTFILES_DIR"/.ai/agents/roles/*.md; do
-    name="$(basename "$role" .md)"
-    check_link "$HOME/.claude/agents/$name.md" "/dot-files/.ai/agents/claude/$name.md" "Claude   agent $name"
-    check_link "$HOME/.codex/agents/$name.toml" "/dot-files/.ai/agents/codex/$name.toml" "Codex    agent $name"
-    check_link "$HOME/.config/opencode/agents/$name.md" "/dot-files/.ai/agents/opencode/$name.md" "OpenCode agent $name"
-done
-check_link "$HOME/.agents/roles" "/dot-files/.ai/agents/roles" "Role briefs for CLI workers"
 
 echo ""
 echo "────────────────────────────────────────"

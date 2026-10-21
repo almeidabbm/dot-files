@@ -71,14 +71,9 @@ for skill in "$DOTFILES_DIR"/.ai/skills/*/; do
 done
 
 echo ""
-echo "👥 Worker agents (~/.claude/agents)"
+echo "🧹 Retired worker agents (built-in subagents replace them)"
 prune_dangling_links "$HOME/.claude/agents" "Claude agent"
-for agent in "$DOTFILES_DIR"/.ai/agents/claude/*.md; do
-    create_symlink "$agent" "$HOME/.claude/agents/$(basename "$agent")" "Agent $(basename "$agent" .md)"
-done
-echo ""
-echo "🤝 Shared (~/.agents, used by every host; removed only by unlink.sh)"
-create_symlink "$DOTFILES_DIR/.ai/agents/roles" "$HOME/.agents/roles" "Role briefs for CLI workers"
+prune_dangling_links "$HOME/.agents" "role briefs"
 
 echo ""
 echo "🎉 Claude Code setup complete!"

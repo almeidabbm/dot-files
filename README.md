@@ -24,9 +24,9 @@ Each piece installs on its own if you'd rather not touch your shell or editor:
 | `link-opencode.sh` | `unlink-opencode.sh` | `~/.config/opencode/`, plus the shared `~/.agents/` links |
 | `link-plugins.sh` | `unlink-plugins.sh` | Third-party agent plugins ([ponytail](https://github.com/DietrichGebert/ponytail)), installed through each host's plugin CLI |
 
-Every host script installs the shared `~/.agents/` links (skills for Codex and OpenCode, role briefs for CLI workers) because any host may spawn a worker on either provider. Only `unlink.sh` removes them, so uninstalling one host never breaks another.
+Every host script installs the shared `~/.agents/` links (skills for Codex and OpenCode). Only `unlink.sh` removes them, so uninstalling one host never breaks another.
 
-Check an install with `./doctor.sh` (read-only, runs every check and exits non-zero if any failed) or `./list-symlink.sh`. Run `./tests/run.sh` after changing the link scripts or the agent renderer.
+Check an install with `./doctor.sh` (read-only, runs every check and exits non-zero if any failed) or `./list-symlink.sh`. Run `./tests/run.sh` after changing the link scripts.
 
 ---
 
@@ -38,7 +38,6 @@ Operating rules for agents live under [`.ai/`](.ai/) and are projected into each
 | --- | --- | --- | --- | --- |
 | Always-loaded rules | [`shared-instructions.md`](.ai/shared-instructions.md) | `~/.claude/CLAUDE.md` | `~/.codex/AGENTS.md` | `~/.config/opencode/AGENTS.md` |
 | On-demand skills | [`skills/`](.ai/skills/) | `~/.claude/skills/` | `~/.agents/skills/` | `~/.agents/skills/` |
-| Worker agents | [`agents/roles/`](.ai/agents/roles/) | `~/.claude/agents/` | `~/.codex/agents/` | `~/.config/opencode/agents/` |
 
 The always-loaded file holds task, verification, and style rules plus one-line hooks into the skills. Each host lists skill descriptions every turn and loads the body on demand, instead of relying on a "read this path" pointer the agent has to act on itself:
 
@@ -49,7 +48,7 @@ The always-loaded file holds task, verification, and style rules plus one-line h
 
 Third-party plugins are installed, not vendored: `link-plugins.sh` runs each host's plugin CLI, so the host owns updates. [ponytail](https://github.com/DietrichGebert/ponytail) keeps changes to the smallest complete diff and adds `/ponytail-review` and `/ponytail-audit`; in Codex, trust its two hooks once under `/hooks`.
 
-Three worker roles (`investigator`, `implementer`, `reviewer`) are written once in [`agents/roles/`](.ai/agents/roles/) and rendered into each host's agent format by [`agents/render.sh`](.ai/agents/render.sh); run it after editing a role, and `doctor.sh` fails when the rendered files are stale. A role fixes instructions and write access only. The main agent chooses provider, model, and effort per spawn where the route allows it, and can run a worker on either provider from any host: native subagents for the host's own provider, `codex exec` or `claude -p` for the other one. The role text is also linked at `~/.agents/roles/` so a `codex exec` brief can prepend it; the `claude -p` route reads the Claude agent file, so `link-claude.sh` must have run on the machine.
+There are no custom worker agents. Workers are each host's built-in subagents (an explorer for investigation, a general agent for implementation, a fresh-context review before a PR), briefed by the `delegate` skill. The main agent chooses provider, model, and effort per spawn and can run a worker on either provider from any host: native subagents for the host's own provider, `codex exec` or `claude -p` for the other one, with read-only set by the CLI flag.
 
 Start your preferred agent normally. The workflow does not depend on the main agent's model or require a custom launcher. Paths assume `~/Develop/dot-files`, matching the install scripts. This layer instructs agents; it does not enforce against them. Branch policy belongs to each repository.
 
