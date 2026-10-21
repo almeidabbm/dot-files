@@ -45,6 +45,10 @@ create_symlink "$HOME/Develop/dot-files/.zshrc" "$HOME/.zshrc" "Zsh config"
 create_symlink "$HOME/Develop/dot-files/.p10k.zsh" "$HOME/.p10k.zsh" "Powerlevel10k theme"
 
 echo ""
+echo "❄️  Setting up Nix configuration..."
+"$DOTFILES_DIR/link-nix.sh"
+
+echo ""
 "$DOTFILES_DIR/link-claude.sh"
 
 echo ""

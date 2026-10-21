@@ -1,3 +1,6 @@
+# Personal tools from ~/.config/nix/flake.nix.
+path=("$HOME/.nix-profile/bin" "${(@)path:#$HOME/.asdf/shims}")
+
 # direnv: export env vars before p10k instant prompt to avoid console output warning
 # see https://github.com/romkatv/powerlevel10k/issues/702
 if command -v direnv &> /dev/null; then
@@ -83,7 +86,7 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git asdf)
+plugins=(git)
 
 source $ZSH/oh-my-zsh.sh
 

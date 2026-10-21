@@ -6,6 +6,7 @@ DOTFILES_DIR="$HOME/Develop/dot-files"
 shopt -s nullglob
 
 targets=(
+    "$HOME/.config/nix|Personal Nix configuration"
     "$HOME/.config/nvim/init.lua|Neovim init"
     "$HOME/.config/nvim/lua|Neovim Lua config"
     "$HOME/.zshrc|Zsh config"

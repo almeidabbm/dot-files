@@ -18,6 +18,7 @@ Each piece installs on its own if you'd rather not touch your shell or editor:
 | Install | Remove | What it touches |
 | --- | --- | --- |
 | `link.sh` | `unlink.sh` | Everything below |
+| `link-nix.sh` | `unlink-nix.sh` | `~/.config/nix/` |
 | `link-claude.sh` | `unlink-claude.sh` | `~/.claude/`, plus the shared `~/.agents/` links |
 | `link-codex.sh` | `unlink-codex.sh` | `~/.codex/`, plus the shared `~/.agents/` links |
 | `link-opencode.sh` | `unlink-opencode.sh` | `~/.config/opencode/`, plus the shared `~/.agents/` links |
@@ -88,7 +89,36 @@ Keys and a troubleshooting table in [`.config/tmux/CHEATSHEET.md`](.config/tmux/
 
 ## Shell
 
-Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/romkatv/powerlevel10k) prompt. Includes git and [asdf](https://asdf-vm.com/) plugins, [fzf](https://github.com/junegunn/fzf) integration, Go path setup, and bun completions.
+Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/romkatv/powerlevel10k) prompt. Includes the git plugin, personal [Nix](https://nixos.org/) tools, [fzf](https://github.com/junegunn/fzf) integration, Go path setup, and bun completions.
+
+## Personal Nix tools
+
+[`.config/nix/flake.nix`](.config/nix/flake.nix) defines Node 24, pnpm 12, and
+Python 3.11 for Apple Silicon macOS. Its lock file pins the package collection;
+`nix.conf` enables `nix-command` and flakes.
+
+After installing Nix, link the configuration and install the tools:
+
+```bash
+./link-nix.sh
+nix profile add "path:$HOME/Develop/dot-files/.config/nix#default"
+```
+
+`link-nix.sh` backs up an existing configuration directory before replacing it
+with a symlink. Open a new terminal to use the tools. The linked `.zshrc` puts
+personal tools on PATH before direnv loads project environments, so a project's
+flake can select its own versions.
+
+To update the tools:
+
+```bash
+nix flake update --flake "path:$HOME/Develop/dot-files/.config/nix"
+nix profile upgrade --all
+```
+
+The commands address the flake directly in dot-files because Nix does not accept
+a `path:` flake whose root is a directory symlink. `unlink-nix.sh` removes only
+this repository's configuration link; installed tools remain in the Nix profile.
 
 ## Prerequisites
 
@@ -97,7 +127,7 @@ Zsh with [oh-my-zsh](https://ohmyz.sh/) + [powerlevel10k](https://github.com/rom
 | [Neovim](https://neovim.io/) >= 0.11 | Editor config |
 | [oh-my-zsh](https://ohmyz.sh/) | Shell config |
 | [powerlevel10k](https://github.com/romkatv/powerlevel10k) | Shell theme |
-| [asdf](https://asdf-vm.com/) | Version management |
+| [Nix](https://nixos.org/download/) | Node, pnpm, and Python |
 | [fzf](https://github.com/junegunn/fzf) | Fuzzy finding |
 | [tmux](https://github.com/tmux/tmux) | Terminal multiplexing |
 | [GitHub CLI](https://cli.github.com/) + `gh stack` | Shared stacking rules |

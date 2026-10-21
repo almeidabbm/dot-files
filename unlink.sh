@@ -39,6 +39,9 @@ remove_symlink "$HOME/.zshrc" "Zsh config"
 remove_symlink "$HOME/.p10k.zsh" "Powerlevel10k config"
 
 echo ""
+"$(cd "$(dirname "$0")" && pwd)/unlink-nix.sh"
+
+echo ""
 "$(cd "$(dirname "$0")" && pwd)/unlink-claude.sh"
 
 echo ""

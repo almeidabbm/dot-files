@@ -77,6 +77,27 @@ check "--check fails when a role changed after the last render" '! "$DOTS/.ai/ag
 "$DOTS/.ai/agents/render.sh" >/dev/null 2>&1
 
 echo ""
+echo "🧪 Nix configuration"
+mkdir -p "$HOME/.config/nix"
+printf 'keep\n' > "$HOME/.config/nix/local.conf"
+"$DOTS/link-nix.sh" > "$TMP/link-nix.out"
+check "nix: configuration directory is linked" '[[ -L "$HOME/.config/nix" && -f "$HOME/.config/nix/flake.lock" ]]'
+check "nix: existing configuration is backed up" 'compgen -G "$HOME/.config/nix.backup.*/nix/local.conf" >/dev/null'
+"$DOTS/link-nix.sh" >/dev/null
+check "nix: repeated linking does not nest the link" '[[ "$(readlink "$HOME/.config/nix")" == "$DOTS/.config/nix" && ! -L "$DOTS/.config/nix/nix" ]]'
+"$DOTS/unlink-nix.sh" >/dev/null
+check "nix: unlink removes our configuration link" '[[ ! -e "$HOME/.config/nix" && ! -L "$HOME/.config/nix" ]]'
+mkdir -p "$HOME/other-nix"
+ln -s "$HOME/other-nix" "$HOME/.config/nix"
+"$DOTS/unlink-nix.sh" >/dev/null
+check "nix: unlink preserves another configuration link" '[[ -L "$HOME/.config/nix" ]]'
+rm "$HOME/.config/nix"
+mkdir -p "$HOME/.config/nix"
+"$DOTS/unlink-nix.sh" >/dev/null
+check "nix: unlink preserves a real configuration directory" '[[ -d "$HOME/.config/nix" && ! -L "$HOME/.config/nix" ]]'
+"$DOTS/link-nix.sh" >/dev/null
+
+echo ""
 echo "🧪 link scripts"
 "$DOTS/link-claude.sh" >/dev/null && "$DOTS/link-codex.sh" >/dev/null && "$DOTS/link-opencode.sh" >/dev/null
 check "claude: rules, skills, agents linked" '[[ -L "$HOME/.claude/CLAUDE.md" && -e "$HOME/.claude/skills/git-workflow/SKILL.md" && -e "$HOME/.claude/agents/reviewer.md" ]]'
