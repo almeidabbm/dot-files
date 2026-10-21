@@ -44,6 +44,7 @@ The always-loaded file holds task, verification, and style rules plus one-line h
 | Skill | Fires when |
 | --- | --- |
 | [`git-workflow`](.ai/skills/git-workflow/SKILL.md) | First branch, commit, stack, worktree, or PR operation in a task; `gh stack` or a rebase fails |
+| [`babysit-pr`](.ai/skills/babysit-pr/SKILL.md) | The user says to merge or babysit a PR: wait for all CI green, fix failures, answer review threads, merge |
 | [`delegate`](.ai/skills/delegate/SKILL.md) | Delegating a bounded investigation, parallel implementation, or independent review; choosing a worker's provider, model, or effort |
 
 Third-party plugins are installed, not vendored: `link-plugins.sh` runs each host's plugin CLI, so the host owns updates. [ponytail](https://github.com/DietrichGebert/ponytail) keeps changes to the smallest complete diff and adds `/ponytail-review` and `/ponytail-audit`; in Codex, trust its two hooks once under `/hooks`.

@@ -22,6 +22,7 @@ Personal defaults across agent tools. The user's current instructions, the host'
 - Load the `git-workflow` skill before starting implementation and before the first branch, commit, stack, worktree, or PR operation in a task. It owns trunk sync, `gh stack`, its fallbacks, and worktree conventions.
 - Follow the repository's branch policy; preserve existing user changes.
 - Pushing feature branches and submitting PRs within the task is authorized without asking again.
+- When the user says to merge a PR, load the `babysit-pr` skill: it waits for all CI to pass, handles review threads, and merges.
 - Use Conventional Commits with subjects under 72 characters. Use the body for why. Never add `Co-Authored-By` trailers.
 - If a rebase conflicts, stop and show the conflicts instead of guessing through them.
 
