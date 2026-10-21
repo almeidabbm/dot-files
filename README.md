@@ -22,6 +22,7 @@ Each piece installs on its own if you'd rather not touch your shell or editor:
 | `link-claude.sh` | `unlink-claude.sh` | `~/.claude/`, plus the shared `~/.agents/` links |
 | `link-codex.sh` | `unlink-codex.sh` | `~/.codex/`, plus the shared `~/.agents/` links |
 | `link-opencode.sh` | `unlink-opencode.sh` | `~/.config/opencode/`, plus the shared `~/.agents/` links |
+| `link-plugins.sh` | `unlink-plugins.sh` | Third-party agent plugins ([ponytail](https://github.com/DietrichGebert/ponytail)), installed through each host's plugin CLI |
 
 Every host script installs the shared `~/.agents/` links (skills for Codex and OpenCode, role briefs for CLI workers) because any host may spawn a worker on either provider. Only `unlink.sh` removes them, so uninstalling one host never breaks another.
 
@@ -45,6 +46,8 @@ The always-loaded file holds task, verification, and style rules plus one-line h
 | --- | --- |
 | [`git-workflow`](.ai/skills/git-workflow/SKILL.md) | First branch, commit, stack, worktree, or PR operation in a task; `gh stack` or a rebase fails |
 | [`delegate`](.ai/skills/delegate/SKILL.md) | Delegating a bounded investigation, parallel implementation, or independent review; choosing a worker's provider, model, or effort |
+
+Third-party plugins are installed, not vendored: `link-plugins.sh` runs each host's plugin CLI, so the host owns updates. [ponytail](https://github.com/DietrichGebert/ponytail) keeps changes to the smallest complete diff and adds `/ponytail-review` and `/ponytail-audit`; in Codex, trust its two hooks once under `/hooks`.
 
 Three worker roles (`investigator`, `implementer`, `reviewer`) are written once in [`agents/roles/`](.ai/agents/roles/) and rendered into each host's agent format by [`agents/render.sh`](.ai/agents/render.sh); run it after editing a role, and `doctor.sh` fails when the rendered files are stale. A role fixes instructions and write access only. The main agent chooses provider, model, and effort per spawn where the route allows it, and can run a worker on either provider from any host: native subagents for the host's own provider, `codex exec` or `claude -p` for the other one. The role text is also linked at `~/.agents/roles/` so a `codex exec` brief can prepend it; the `claude -p` route reads the Claude agent file, so `link-claude.sh` must have run on the machine.
 

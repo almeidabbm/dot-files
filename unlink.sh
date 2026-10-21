@@ -67,6 +67,10 @@ echo "🔌 MCP configurations:"
 "$(cd "$(dirname "$0")" && pwd)/unlink-mcp.sh"
 
 echo ""
+echo "🧩 Agent plugins:"
+"$(cd "$(dirname "$0")" && pwd)/unlink-plugins.sh"
+
+echo ""
 echo "🔧 Tool configurations:"
 am="$HOME/.local/bin/agent-memory"
 if [[ -L "$am" ]] && [[ "$(readlink "$am")" == *"$HOME/Develop/dot-files/.ai/bin/agent-memory"* ]]; then
