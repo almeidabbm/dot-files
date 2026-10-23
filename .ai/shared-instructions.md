@@ -38,6 +38,7 @@ Personal defaults across agent tools. The user's current instructions, the host'
 
 - The ticket, when present, owns the problem statement and status. For larger work, record agreed scope, success criteria, and approach in the ticket or PR before implementing.
 - Prefer open PRs and tracker status as the handoff surface across sessions. Keep the workflow independent of any particular tracker.
+- Refer to tickets and PRs with descriptive Markdown links, e.g. `[custom metrics support](url)` or `[DuckDB improvements PR](url)`, never bare IDs or numbers. Use short, context-appropriate descriptions; exact titles aren't required.
 - Follow existing project conventions and patterns; prefer functional patterns where appropriate.
 - Keep changes focused. Avoid unnecessary annotations, comments, or docstrings in code you did not change.
 - Improve shared instructions after observed, recurring friction. Keep always-relevant rules in this file, occasional procedures in the `git-workflow` and `delegate` skills, and repository-specific facts in that repository. Remove obsolete or conflicting guidance rather than accumulating exceptions.
