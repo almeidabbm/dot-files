@@ -6,7 +6,7 @@ Three parts, each usable on its own:
 
 1. [The machine](#the-machine) — clone, link, verify
 2. [Git and GitHub](#git-and-github) — identity, defaults, auth, keys
-3. [Working in a stack](#working-in-a-stack) — the stacked-PR workflow
+3. [Working in a stack](#working-in-a-stack) — optional stacked PRs
 
 ---
 
@@ -137,9 +137,10 @@ gh stack --version
 ```
 
 The shared workflow rules in `.ai/shared-instructions.md` and the `git-workflow` skill
-in `.ai/skills/git-workflow/` assume this extension is present. They cover commits
+in `.ai/skills/git-workflow/` default to one PR per feature, split into layered commits;
+they use this extension only when you ask for a stack. They cover commits
 (Conventional Commits, no `Co-Authored-By` trailers), worktrees under `.worktrees/`,
-and stacking — but deliberately state **no branch policy**. Each repository owns that, through its own `AGENTS.md`/`CLAUDE.md`, branch
+and when a change needs its own PR — but deliberately state **no branch policy**. Each repository owns that, through its own `AGENTS.md`/`CLAUDE.md`, branch
 protection, or CI. Follow what the repository states rather than assuming a rule it has
 not written down.
 
@@ -147,7 +148,7 @@ not written down.
 
 ## Working in a stack
 
-A stack is a chain of branches where each one is based on the one below it, and each
+Optional: agents work in one PR per feature unless you ask for a stack. A stack is a chain of branches where each one is based on the one below it, and each
 becomes its own pull request. The bottom branch targets trunk; every other branch targets
 its parent. Small, reviewable PRs without waiting for the one below to merge.
 

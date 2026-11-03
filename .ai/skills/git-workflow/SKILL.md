@@ -1,6 +1,6 @@
 ---
 name: git-workflow
-description: Personal Git conventions for trunk sync, gh stack stacked PRs and their fallbacks, worktrees under .worktrees/, commits, and PR submission. Load before starting implementation (trunk sync comes first), before the first branch, commit, stack, worktree, or PR operation in a task, and when gh stack or a rebase fails.
+description: Personal Git conventions for trunk sync, single-PR features split into layered commits, when a change needs its own PR, worktrees under .worktrees/, and PR submission with a risk map. Load before starting implementation (trunk sync comes first), before the first branch, commit, worktree, or PR operation in a task, and when a rebase fails.
 ---
 
 # Git Workflow
@@ -9,32 +9,40 @@ Repository branch policy takes precedence over these personal defaults. Check in
 
 ## Branches And Sync
 
-- Before starting implementation, and again when trunk moves, sync with current trunk. Inside a stack, use `gh stack sync`; otherwise fetch origin and rebase onto `origin/<trunk>`.
-- Determine the repository's actual trunk branch; `trunk` below is a placeholder, not a required branch name. Inspect the working tree before syncing and preserve existing changes.
-- Check the stacking extension before using it: `gh extension list | grep -q gh-stack`. If needed, install with `gh extension install github/gh-stack`.
-- Read `gh stack --help` and the relevant command help. Start a stack with `gh stack init <branch-name>`; add a layer with `gh stack add -m "message" <branch-name>`.
-- For standalone work or when stacking is unavailable, use `git checkout -b <branch-name>`.
+- Before starting implementation, and again when trunk moves, fetch origin and rebase onto `origin/<trunk>`. Inspect the working tree first and preserve existing changes.
+- Determine the repository's actual trunk branch; `trunk` is a placeholder, not a required branch name.
+- One feature, one branch: `git checkout -b <branch-name>`, or a worktree (below).
+- If a rebase conflicts, stop and show the conflicts.
 
-## Stacked Pull Requests
+## Layered Commits
 
-- For larger changes, present a proposed stack of small, independently understandable PRs before implementing so the user can adjust scope. Each layer must leave the codebase working.
-- Before creating the next layer, run the related checks and commit the current work.
-- Submit with `gh stack submit`. Noninteractive submission creates draft PRs by default; pass `--open` for ready-for-review PRs. The interactive editor has its own draft toggle.
-- To amend a layer, use `git commit --amend`, then `gh stack rebase --upstack` so downstream layers pick up the change.
-- `gh stack modify` is the interactive restructure UI for dropping, folding, reordering, or renaming layers; it is not an amend. It requires a clean working tree, linear history, and no rebase in progress.
-- `gh stack init` enables `git rerere`, which can replay a previously resolved conflict. If a rebase conflicts, stop and show the conflicts.
+A feature ships as one PR; its commits are the review units. Each commit is one **layer**: a slice of the change that fails in one way and is reviewed in one way. [`LAYERS.md`](LAYERS.md) lists the common layers, how each fails, and how each is reviewed; read it before the first commit of a feature.
 
-Stacking is enabled per repository. Exit code `9` from a `gh stack` command means the repository does not support it. State that limitation and use these fallbacks:
+- Order commits by blast radius: mechanical prep first, then the catastrophic layers (data, access, domain logic, contracts), then the rest, UI last. A reviewer reads from the top and stops once the risk is behind them.
+- Every commit builds and passes the related checks on its own. Tests travel in the commit whose code they cover.
+- Mechanical changes (renames, moves, codegen, formatting, lockfiles, dependency bumps) get their own commits with no behaviour change, so the reviewer can skip them.
+- Subject: Conventional Commit, scope is the feature. Body: why, then what breaks if this commit is wrong. Last line, a trailer naming the layer: `Layer: data`.
+- For a larger feature, propose the commit plan (layer, one-line intent) before implementing so the user can adjust scope.
+- Review fixes land as new commits on the affected layer (`git commit --fixup <sha>`), so "changes since last review" stays readable. Squash with `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash <base>` only when the repository merges with rebase; with squash-merge, leave them.
 
-| Operation | Fallback |
-| --- | --- |
-| Create branch | `git checkout -b <branch-name>` |
-| View branches | `git log --oneline --graph --decorate --all -20` |
-| Submit | `gh pr create --base <parent-branch>` per branch, in dependency order |
-| Sync | `git fetch origin`, then rebase each child onto its updated parent |
-| Amend | `git commit --amend`, then rebase downstream branches in order |
+## When A Change Needs Its Own PR
 
-When falling back, explicitly say that downstream branches will not be rebased automatically and the PRs will not be linked as a stack on GitHub. Distinguish unsupported stacking from authentication or other command failures.
+Split by deploy order, not by size. A change goes in an earlier PR, merged and deployed first, when shipping it together with the code that uses it would break a rolling deploy or a rollback:
+
+- **Migrations that old code cannot run against**: renames, drops, new NOT NULL without default, type changes, backfills. Use expand then contract: additive migration first, code next, cleanup last. Additive, backward-compatible migrations (new table, nullable column, index) stay in the feature PR.
+- **Breaking contract changes** that external callers depend on (public API, SDK, CLI, MCP tools, file formats): ship the new shape alongside the old, migrate callers, then remove.
+- **Config changes** that existing installs must set before the new code runs.
+
+If the repository has a release-safety or compatibility check, its verdict decides.
+
+## Pull Requests
+
+- Open with `gh pr create`. The description leads with a **risk map**: each commit in a catastrophic layer, what could go wrong, and how it was verified. Every other layer gets one line naming its evidence (tests, screenshots, eval run). The repository's own list of catastrophic paths, when it has one, extends the defaults in `LAYERS.md`.
+- Point the fresh-context review agent at the risk map and the risky commits, not the whole diff.
+
+## Stacks (opt-in)
+
+Use `gh stack` only when the user asks for stacked PRs. Check `gh extension list | grep -q gh-stack` and read `gh stack --help`; exit code `9` means the repository does not support stacking, so say so and fall back to dependent branches with `gh pr create --base <parent-branch>`.
 
 ## Worktrees
 

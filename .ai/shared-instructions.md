@@ -13,13 +13,13 @@ Personal defaults across agent tools. The user's current instructions, the host'
 ## Delegation
 
 - You own the task, integration, and final result. Default to working locally. Delegate only when an independent subtask can run alongside useful local work and the expected benefit exceeds briefing, coordination, and verification costs. Keep a bug's reproduction and root-cause investigation together.
-- Use the host's built-in subagents: a read-only explorer for investigation, a general agent for implementation, and a fresh-context read-only review of the diff before a PR.
+- Use the host's built-in subagents: a read-only explorer for investigation, a general agent for implementation, and a fresh-context read-only review before a PR, aimed at the PR's risk map.
 - Load the `delegate` skill when you delegate: it covers provider, model, and effort selection, route commands, the brief template, and result verification.
 - If you are a worker, complete the brief and return evidence to the parent. Leave further delegation and Git coordination to the parent unless the brief assigns them.
 
 ## Git And Delivery
 
-- Load the `git-workflow` skill before starting implementation and before the first branch, commit, stack, worktree, or PR operation in a task. It owns trunk sync, `gh stack`, its fallbacks, and worktree conventions.
+- Load the `git-workflow` skill before starting implementation and before the first branch, commit, worktree, or PR operation in a task. It owns trunk sync, layered commits, when to split PRs, the PR risk map, and worktree conventions.
 - Follow the repository's branch policy; preserve existing user changes.
 - Pushing feature branches and submitting PRs within the task is authorized without asking again.
 - When the user says to merge a PR, load the `babysit-pr` skill: it waits for all CI to pass, handles review threads, and merges.
@@ -31,6 +31,7 @@ Personal defaults across agent tools. The user's current instructions, the host'
 - When fixing a bug, first write a failing test that reproduces it, then keep that test with the fix. New behavior ships with tests in the same branch.
 - Run checks related to the changed files before committing or reporting completion. Find the commands in repository instructions, scripts, or CI. If the related test surface remains unclear, ask rather than running the whole suite by default.
 - For documentation-only changes, verify referenced files, links, and command examples. For UI behavior, inspect the running result when the necessary tools are available.
+- Spend review on blast radius: read the code of catastrophic layers (data, access, domain logic, contracts); check the rest against evidence such as tests, screenshots, or evals.
 - Review the final diff against the request for correctness, regressions, and unrelated changes. Validate worker findings and test evidence; a success message alone is insufficient.
 - Report what changed, what was verified, and what remains unverified or blocked. Distinguish checks actually run from suggested checks.
 

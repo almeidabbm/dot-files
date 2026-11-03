@@ -6,7 +6,7 @@
 
 ## Quick start
 
-New machine? [`docs/SETUP.md`](docs/SETUP.md) walks through git, GitHub, and stacked PRs.
+New machine? [`docs/SETUP.md`](docs/SETUP.md) walks through git, GitHub, and optional stacked PRs.
 
 ```bash
 git clone <repo-url> ~/Develop/dot-files
@@ -43,7 +43,7 @@ The always-loaded file holds task, verification, and style rules plus one-line h
 
 | Skill | Fires when |
 | --- | --- |
-| [`git-workflow`](.ai/skills/git-workflow/SKILL.md) | First branch, commit, stack, worktree, or PR operation in a task; `gh stack` or a rebase fails |
+| [`git-workflow`](.ai/skills/git-workflow/SKILL.md) | First branch, commit, worktree, or PR operation in a task; a rebase fails. Owns layered commits ([`LAYERS.md`](.ai/skills/git-workflow/LAYERS.md)), when to split PRs, and the PR risk map |
 | [`babysit-pr`](.ai/skills/babysit-pr/SKILL.md) | The user says to merge or babysit a PR: wait for all CI green, fix failures, answer review threads, merge |
 | [`delegate`](.ai/skills/delegate/SKILL.md) | Delegating a bounded investigation, parallel implementation, or independent review; choosing a worker's provider, model, or effort |
 
@@ -133,6 +133,6 @@ this repository's configuration link; installed tools remain in the Nix profile.
 | [Nix](https://nixos.org/download/) | Node, pnpm, and Python |
 | [fzf](https://github.com/junegunn/fzf) | Fuzzy finding |
 | [tmux](https://github.com/tmux/tmux) | Terminal multiplexing |
-| [GitHub CLI](https://cli.github.com/) + `gh stack` | Shared stacking rules |
+| [GitHub CLI](https://cli.github.com/) + `gh stack` | PRs; optional stacked PRs |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Claude integration |
 | [Codex](https://developers.openai.com/codex/) | Codex integration |
