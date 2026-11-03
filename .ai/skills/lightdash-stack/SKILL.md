@@ -1,6 +1,6 @@
 ---
 name: lightdash-stack
-description: Use in a repo that has a `rainbow.toml` (lightdash) whenever the running app is needed: to run, preview, screenshot, browser-test or e2e a branch, or to start a dev stack in a worktree. Decides between a Rainbow cloud environment and the local pm2 stack, and gives the Rainbow recipe.
+description: "Use in a repo that has a `rainbow.toml` (lightdash) whenever the running app is needed: to run, preview, screenshot, browser-test or e2e a branch, or to start a dev stack in a worktree. Decides between a Rainbow cloud environment and the local pm2 stack, and gives the Rainbow recipe."
 ---
 
 # lightdash-stack — Rainbow or local?
