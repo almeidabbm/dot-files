@@ -38,6 +38,7 @@ Personal defaults across agent tools. The user's current instructions, the host'
 
 - The ticket, when present, owns the problem statement and status. For larger work, record agreed scope, success criteria, and approach in the ticket or PR before implementing.
 - Prefer open PRs and tracker status as the handoff surface across sessions. Keep the workflow independent of any particular tracker.
+- Write messages to the user so they read cold: name things by what they are, not by labels coined during the work, and state results instead of narrating upcoming steps. Working labels and running narration belong in agent-to-agent briefs and reports.
 - In conversation with the user only, refer to tickets and PRs with descriptive Markdown links that say what changes. Shorten labels when context is established; include the affected feature in fresh mentions: `[PR adding chart images](url)` vs. `[PR adding chart images to Slack](url)`. Use natural wording, not exact titles or bare identifiers. This rule does not apply to authored artifacts such as PR descriptions, commit messages, or documentation.
 - Follow existing project conventions and patterns; prefer functional patterns where appropriate.
 - Keep changes focused. Avoid unnecessary annotations, comments, or docstrings in code you did not change.
