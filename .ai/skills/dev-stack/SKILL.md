@@ -17,7 +17,6 @@ Remote, when any of these hold:
 
 - The branch lives in a worktree.
 - The goal is to see, screenshot, browser-test or e2e the change.
-- A PR is open and its preview environment already exists.
 - Someone else should open it.
 
 Local default-branch stack, only when:
@@ -29,7 +28,7 @@ Typechecks and unit tests stay local either way. Run them one at a time across s
 
 ## Hand back
 
-End every build the user should try with a link to an environment you started yourself, with the feature flag on when the change sits behind one, and the two or three things to check there. Never change flags on shared or CI environments.
+End every build the user should try with a link to an environment you started yourself (never the PR's CI preview), with the feature flag on when the change sits behind one, and the two or three things to check there. Never change flags on shared or CI environments.
 
 ## Local hygiene
 
