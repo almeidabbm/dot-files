@@ -71,4 +71,6 @@ The JSON result carries `session_id`; resume with `claude -p --resume <session_i
 - Do independent work or wait while a worker runs; collect required results before dependent decisions.
 - Review actual diffs and source evidence against the brief. Reuse valid test evidence, run missing checks, and recheck affected behavior after integration.
 - For an independent review, supply the spec, the diff, the size estimate, and [`review-standards.md`](review-standards.md), not the reasoning behind the change, and ask for evidence-backed findings. Ask it to flag only gaps that affect correctness or the spec. After three review-and-fix rounds, step back and reconsider the approach instead of another round.
+- When a worker's result is off course, restart it from the last good commit with a corrected brief rather than patching its output; patch only when the fix is small and clear.
+- When the implementation approach is genuinely uncertain, run two or three workers on the same brief in separate worktrees and keep the best, then delete the rest. Skip this when the approach is clear; it multiplies cost.
 - If a worker fails, inspect its output and partial changes before retrying. Correct the brief, execution problem, model, or effort; after repeated failure, reassess the approach instead of relaunching the same task.
