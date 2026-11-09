@@ -23,7 +23,7 @@ A feature ships as one PR; its commits are the review units. Each commit is one 
 - Mechanical changes (renames, moves, codegen, formatting, lockfiles, dependency bumps) get their own commits with no behaviour change, so the reviewer can skip them.
 - Subject: Conventional Commit, scope is the feature. Body: why, then what breaks if this commit is wrong. Last line, a trailer naming the layer: `Layer: data`.
 - For a larger feature, propose the commit plan (layer, one-line intent) before implementing so the user can adjust scope.
-- Review fixes land as new commits on the affected layer (`git commit --fixup <sha>`), so "changes since last review" stays readable. Squash with `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash <base>` only when the repository merges with rebase; with squash-merge, leave them.
+- Review fixes land as new commits with their own Conventional Commit subject, so "changes since last review" stays readable. Don't rewrite pushed history to fold them in.
 
 ## When A Change Needs Its Own PR
 
