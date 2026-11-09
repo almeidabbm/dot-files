@@ -15,7 +15,7 @@ Use each host's built-in subagents; the kind of work, not a named role, decides 
 | --- | --- | --- | --- |
 | Investigate | Claude `Explore`, Codex `explorer`, OpenCode `explore` | No | The answer with `path:line` evidence, what was verified versus inferred, and false assumptions in the brief |
 | Implement | Claude `general-purpose`, Codex `worker`, OpenCode `general` | Yes | Files changed, checks run with results, what is unverified |
-| Review | A fresh-context read-only worker, or the host's review skill such as `/code-review` | No | Findings ranked by severity, each with `path:line` and the failing input; what was checked and clean |
+| Review | A fresh-context read-only worker, or the host's review skill such as `/code-review` | No | Findings ranked by severity, each with `path:line` and the failing input; what was checked and clean; the changes a person should read themselves (data, access, contracts, formats, existing shared behavior) with why, or "none" with why; whether new tests fail on the base branch; evidence that behavior with the feature flag off matches the base branch; files outside the brief's scope |
 
 Read-only is enforced by Claude `Explore`, OpenCode `explore`, and the CLI flags below. Codex subagents inherit the parent's sandbox, so a Codex worker stays read-only only by instruction unless the parent session is read-only.
 
@@ -70,7 +70,7 @@ The JSON result carries `session_id`; resume with `claude -p --resume <session_i
 - Keep branch changes, commits, pushes, and integration with the parent unless explicitly assigned. Git operations follow the `git-workflow` skill.
 - Do independent work or wait while a worker runs; collect required results before dependent decisions.
 - Review actual diffs and source evidence against the brief. Reuse valid test evidence, run missing checks, and recheck affected behavior after integration.
-- For an independent review, supply the spec, the diff, the size estimate, and [`review-standards.md`](review-standards.md), not the reasoning behind the change, and ask for evidence-backed findings. Ask it to flag only gaps that affect correctness or the spec. After three review-and-fix rounds, step back and reconsider the approach instead of another round.
+- For an independent review, supply the spec, the diff, the size estimate, and [`review-standards.md`](review-standards.md), not the reasoning behind the change, and ask for evidence-backed findings. Ask it to flag only gaps that affect correctness or the spec. After three review-and-fix rounds, step back and reconsider the approach instead of another round. When several reviewers ran, merge their reports into one verdict for the user: what to read yourself (or nothing), the test link, and any disagreement between reviewers.
 - When a worker's result is off course, restart it from the last good commit with a corrected brief rather than patching its output; patch only when the fix is small and clear.
 - When the implementation approach is genuinely uncertain, run two or three workers on the same brief in separate worktrees and keep the best, then delete the rest. Skip this when the approach is clear; it multiplies cost.
 - If a worker fails, inspect its output and partial changes before retrying. Correct the brief, execution problem, model, or effort; after repeated failure, reassess the approach instead of relaunching the same task.
