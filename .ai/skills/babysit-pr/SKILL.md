@@ -5,11 +5,17 @@ description: Shepherd an open PR to merge — watch CI, fix failures, answer and
 
 # Babysit PR
 
-The user's "merge" authorizes merging that one PR once the gate passes. Push and sync follow the `git-workflow` skill.
+Push and sync follow the `git-workflow` skill. The user's words pick the mode:
+
+- **babysit**: run the loop until the gate passes, then report. Do not merge.
+- **merge**: babysit, then merge that one PR once the gate passes.
+- **ship it**: first a review-and-fix loop with fresh-context reviewers (`delegate` skill) until no blocker or should-fix remains, then babysit, then merge.
 
 ## Gate
 
 Default: **every** check on the head commit is green (not only required ones), no review thread is unresolved, and no review requests changes. A PR with no checks at all (`gh pr checks` reports none) has nothing to wait for; say so in the report. The user may add conditions (an approval, a deploy check, a command that must pass); the gate is all of them together.
+
+End-to-end test jobs may be left pending only when every file the PR changes is new and reachable only behind a feature flag. Any change to an existing file, including one line that wires in the flag, waits for every check.
 
 ## Start
 

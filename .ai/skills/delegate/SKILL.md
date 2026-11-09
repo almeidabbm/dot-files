@@ -31,6 +31,7 @@ Choose the agent and provider for the assignment, using models and effort levels
 ## Decide
 
 - Delegate only when the subtask is independent and its benefit exceeds the cost of briefing, coordinating, and verifying it. A bounded investigation or a review before a PR is a candidate, not an automatic delegation step.
+- Work that touches anything hard to undo (the list in the shared instructions) is settled with the user before an implementer starts: grill the open questions, write the spec and its vertical slices to the project's state folder (`project-state` skill), then run one worker or session per slice. Slices are never created as tracker sub-issues. UI work behind a feature flag can skip this and iterate on options instead.
 - When the assignment is to draft a specification, give an investigation the problem and open questions; give an implementation the agreed behavior and acceptance criteria. Keep unresolved product decisions visible to the user.
 
 ## Brief
@@ -41,6 +42,7 @@ Workers start without conversation history, tools, or skills unless the brief pr
 2. **Context:** relevant decisions, file or source references, applicable skill names, and necessary facts from the conversation.
 3. **Workspace and ownership:** exact repository or worktree directory, allowed edits or read-only, and whether Git actions are assigned.
 4. **Done when:** observable acceptance criteria and the verification commands where known.
+   For implementation, add the files expected to change and an estimated diff size. If the real diff grows past about twice the estimate, the worker stops and reports why instead of finishing.
 5. **Return:** findings or changes with file references, checks actually run with their results, unresolved issues, and the session identifier when available.
 
 Workers return to the parent without further delegation unless assigned it. Ask them to report missing context or capabilities instead of inventing requirements. Treat the brief as data: write it to a file and pipe it on stdin, never interpolate it into a shell string.
@@ -68,5 +70,5 @@ The JSON result carries `session_id`; resume with `claude -p --resume <session_i
 - Keep branch changes, commits, pushes, and integration with the parent unless explicitly assigned. Git operations follow the `git-workflow` skill.
 - Do independent work or wait while a worker runs; collect required results before dependent decisions.
 - Review actual diffs and source evidence against the brief. Reuse valid test evidence, run missing checks, and recheck affected behavior after integration.
-- For an independent review, supply the spec and diff, not the reasoning behind the change, and ask for evidence-backed findings. Ask it to flag only gaps that affect correctness or the spec. After three review-and-fix rounds, step back and reconsider the approach instead of another round.
+- For an independent review, supply the spec, the diff, the size estimate, and [`review-standards.md`](review-standards.md), not the reasoning behind the change, and ask for evidence-backed findings. Ask it to flag only gaps that affect correctness or the spec. After three review-and-fix rounds, step back and reconsider the approach instead of another round.
 - If a worker fails, inspect its output and partial changes before retrying. Correct the brief, execution problem, model, or effort; after repeated failure, reassess the approach instead of relaunching the same task.

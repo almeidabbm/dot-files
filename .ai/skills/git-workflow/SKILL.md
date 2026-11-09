@@ -38,6 +38,7 @@ If the repository has a release-safety or compatibility check, its verdict decid
 ## Pull Requests
 
 - Open with `gh pr create`. The description leads with a **risk map**: each commit in a catastrophic layer, what could go wrong, and how it was verified. Every other layer gets one line naming its evidence (tests, screenshots, eval run). The repository's own list of catastrophic paths, when it has one, extends the defaults in `LAYERS.md`.
+- In a public repository, keep the risk map in the project's private state folder (`project-state` skill) instead, and give the PR a plain description of the change.
 - Point the fresh-context review agent at the risk map and the risky commits, not the whole diff.
 
 ## Stacks (opt-in)
