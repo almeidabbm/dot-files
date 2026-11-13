@@ -56,15 +56,17 @@ def claude_sessions(cutoff):
     for path in glob.glob(f"{HOME}/.claude/projects/*/*.jsonl"):
         if os.path.getmtime(path) < cutoff or "-private-tmp-" in path:
             continue
-        msgs = []
+        msgs, headless = [], False
         for d in read_jsonl(path):
+            headless = headless or d.get("entrypoint") == "sdk-cli"  # `claude -p` workers and testers
             if d.get("type") != "user" or d.get("isSidechain") or d.get("isMeta") or not d.get("timestamp"):
                 continue
             content = d["message"].get("content")
             texts = [content] if isinstance(content, str) else [
                 c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text"]
             msgs += [(parse_ts(d["timestamp"]), t) for t in map(clean, texts) if t]
-        yield "claude", msgs
+        if not headless:
+            yield "claude", msgs
 
 
 def codex_sessions(cutoff):
@@ -138,14 +140,15 @@ def summarize(sessions, extra=None):
             w["marathon_sessions"] += 1
         for ts, text in fresh:
             row = weeks[week_of(ts)]
+            if "continued from a previous conversation" in text:  # the host's summary, not typed by the user
+                row["compactions"] += 1
+                continue
             row["messages"] += 1
             for key, pattern in PATTERNS.items():
                 if re.search(pattern, text, re.I):
                     row[key] += 1
             if MERGE_RULE.search(text) and len(text.split()) > 12:
                 row["merge_rules_restated"] += 1
-            if "continued from a previous conversation" in text:
-                row["compactions"] += 1
             if tool != "cursor":
                 hourly[(ts.date(), ts.hour)].add(sid)
     peaks = defaultdict(list)
@@ -174,14 +177,15 @@ def self_test():
         ("claude", [(t0, "where are we with this?"), (t0, "why is this so big")]),  # resumed copy
         ("codex", [(t0, "Role: independent reviewer")]),  # worker
         ("codex", [(t0, ">>> TRANSCRIPT START"), (t0, "where are we")]),  # approval reviewer
+        ("claude", [(t0, "This session is being continued from a previous conversation. where are we")]),  # summary
         ("codex", [(t0 + dt.timedelta(minutes=5), "babysit it and merge once build and test is green and no blockers remain")]),
     ]
     rows = summarize(fake)
     assert len(rows) == 1, rows
     r = rows[0]
-    assert r["sessions"] == 2 and r["sessions_claude"] == 1 and r["sessions_codex"] == 1, r
+    assert r["sessions"] == 3 and r["sessions_claude"] == 2 and r["sessions_codex"] == 1, r
     assert r["status_asks"] == 1 and r["size_pushback"] == 1 and r["merge_rules_restated"] == 1, r
-    assert r["peak_parallel_sessions"] == 2, r
+    assert r["peak_parallel_sessions"] == 2 and r["compactions"] == 1 and r["messages"] == 3, r
     print("self-test ok")
 
 
